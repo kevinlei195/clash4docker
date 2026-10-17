@@ -4,16 +4,22 @@ on:
   release:
     types: [published]  # 核心：监听手动发布Release的动作
 
-env:
-  REGISTRY: docker.io
-  IMAGE_NAME: gangz1o/glash
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - project: clash4docker
+            image_name: gangz1o/glash
+            tag_suffix: ''
+          - project: clash4docker-smart
+            image_name: gangz1o/glash-smart
+            tag_suffix: '-smart'
 
     steps:
       - name: Checkout repository
@@ -29,8 +35,7 @@ jobs:
           NEW_VERSION="${RELEASE_TAG#v}"
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "new_tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-
-      # 注意：这里删除了原来的 'Create and push new tag' 步骤
+          echo "image_tag=${{ github.event.release.tag_name }}${{ matrix.project.tag_suffix }}" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -47,12 +52,12 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ${{ matrix.project.project }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.new_version }}
+            docker.io/${{ matrix.project.image_name }}:latest
+            docker.io/${{ matrix.project.image_name }}:${{ steps.version.outputs.image_tag }}
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.new_version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

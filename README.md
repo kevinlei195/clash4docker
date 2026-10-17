@@ -7,6 +7,15 @@
 
 基于 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核、内置 [MetacubexD](https://github.com/MetaCubeX/metacubexd) Dashboard 的多架构 Docker 镜像。
 
+## 项目组成
+
+| 子项目 | 目录 | 镜像 | 内核 |
+| --- | --- | --- | --- |
+| `clash4docker`（默认） | [`./`](../) | `gangz1o/glash` | `MetaCubeX/mihomo` 标准版 |
+| `clash4docker-smart` | [`./clash4docker-smart`](./clash4docker-smart) | `gangz1o/glash-smart` | `vernesong/mihomo` Smart fork（`type: smart`、ASN 偏好、可选 LightGBM） |
+
+两者共享相同的运行时脚本（订阅、热加载、TUN、Hook、定时任务），差异只在内核二进制。Smart 版的用法说明与差异表见 [clash4docker-smart/README.md](./clash4docker-smart/README.md)。
+
 项目同时支持远程订阅和本地配置。订阅下载后会先在候选文件中完成环境变量覆写、自定义 Hook 和 Mihomo 原生校验;全部成功才替换当前配置。定时更新使用 Controller 热加载,失败时保留或恢复旧配置,不会为了更新订阅主动重启容器。
 
 完整文档见 [`docs/`](./docs/README.md)。
@@ -108,10 +117,6 @@ docker logs -f glash
 
 - 论坛:[linux.do](https://linux.do/)
 - Mihomo 配置文档:[wiki.metacubex.one](https://wiki.metacubex.one/)
-
-## Star History
-
-[![Star History Chart](https://star-history.dera.page/svg?repos=gangz1o/clash4docker&type=date&legend=top-left)](https://star-history.dera.page/#gangz1o/clash4docker&type=date&legend=top-left)
 
 ## 致谢
 

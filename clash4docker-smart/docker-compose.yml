@@ -1,0 +1,80 @@
+services:
+  glash-smart:
+    image: gangz1o/glash-smart:latest
+    container_name: glash-smart
+    restart: unless-stopped
+
+    # 高级用法：host 模式会共享宿主网络命名空间，启用后请删除 ports
+    # network_mode: host
+
+    ports:
+      - '7890:7890' # HTTP 代理
+      - '7891:7891' # SOCKS5 代理
+      - '7892:7892' # 混合代理 (HTTP + SOCKS5)
+      - '9090:9090' # API 控制器 & Dashboard
+
+    volumes:
+      # 挂载配置目录（用于持久化配置和缓存）
+      # 使用订阅功能时，配置文件会自动下载到此目录
+      - ./config:/root/.config/mihomo
+      # 或者挂载单个配置文件（不使用订阅功能时）
+      # - ./config.yaml:/root/.config/mihomo/config.yaml:ro
+      # 可选：订阅下载后执行的自定义配置 Hook（脚本需有执行权限）
+      # - ./hooks.d:/app/hooks.d:ro
+
+    environment:
+      - TZ=Asia/Shanghai
+      # ========== 订阅功能配置 ==========
+      # 订阅地址（设置后会自动下载配置文件）
+      # - SUB_URL=https://your-subscription-url.com/config
+      # 订阅自动更新 cron 表达式
+      # 常用格式:
+      #   - "0 */6 * * *"  每6小时更新一次
+      #   - "0 0 * * *"    每天凌晨更新
+      #   - "0 */12 * * *" 每12小时更新一次
+      #   - "*/30 * * * *" 每30分钟更新一次
+      # - SUB_CRON=0 */6 * * *
+      # Dashboard 登录密钥（会自动注入到配置文件中）
+      # - SECRET=your-secret-here
+      # 允许局域网设备连接代理端口
+      # - ALLOW_LAN=true
+      # 同时覆写 ipv6 和 dns.ipv6；不设置时保留原配置
+      # - IPV6_ENABLED=true
+      # 固定 HTTP、SOCKS5、Mixed 代理端口，避免订阅更新后改变容器内端口
+      # - HTTP_PORT=7890
+      # - SOCKS_PORT=7891
+      # - MIXED_PORT=7892
+      # HTTP、SOCKS5、Mixed 代理认证，多个账号用逗号分隔
+      # - AUTHENTICATION=user:password
+      # 固定代理模式（rule、global 或 direct）
+      # - MODE=global
+      # TUN 模式开关（同时需要取消下方 cap_add 和 devices 的注释）
+      # - TUN_ENABLED=true
+      # 某些 NAS 内核不支持 auto-redirect，可显式关闭
+      # - TUN_AUTO_REDIRECT=false
+      # DNS 覆写开关
+      # - DNS_OVERRIDE=true
+      # 首次下载无法直连时使用的外部代理
+      # - DOWNLOAD_PROXY=http://192.168.1.1:7890
+      # 订阅请求 User-Agent
+      # - SUB_USER_AGENT=clash.meta
+
+    # 如果需要 TUN 模式，取消下面的注释
+    # cap_add:
+    #   - NET_ADMIN
+    # devices:
+    #   - /dev/net/tun:/dev/net/tun
+
+    # 健康检查
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9090/version']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'

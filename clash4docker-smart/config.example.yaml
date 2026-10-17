@@ -1,0 +1,184 @@
+# glash-smart 示例配置文件
+# 基于 Smart 内核 (vernesong/mihomo fork) — 在上游 MetaCubeX/mihomo 基础上增加 Smart 策略组
+# Smart 内核文档: https://github.com/vernesong/mihomo
+# Mihomo 配置文档: https://wiki.metacubex.one/
+
+# ==================== 基础配置 ====================
+# HTTP 代理端口
+# 订阅模式下可通过 HTTP_PORT 环境变量固定此值。
+port: 7890
+# SOCKS5 代理端口
+# 订阅模式下可通过 SOCKS_PORT 环境变量固定此值。
+socks-port: 7891
+# 混合代理端口 (HTTP + SOCKS5)
+# 订阅模式下可通过 MIXED_PORT 环境变量固定此值。
+mixed-port: 7892
+# 允许局域网连接
+allow-lan: true
+# 绑定地址
+bind-address: '*'
+# 运行模式: rule / global / direct
+mode: rule
+# 日志级别: silent / error / warning / info / debug
+log-level: info
+# IPv6 支持
+ipv6: false
+
+# ==================== API 控制器 ====================
+# 外部控制器 (Dashboard 需要此配置)
+# 注意: Docker 中使用 0.0.0.0 以允许外部访问
+external-controller: 0.0.0.0:9090
+# API 密钥 (建议设置)
+secret: 'your-secret-here'
+# 外部 UI 目录 (Docker 中已内置，无需配置)
+# external-ui: /app/ui
+
+# ==================== DNS 配置 ====================
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+  ipv6: false
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - '*.localhost'
+    - localhost.ptlogin2.qq.com
+  nameserver:
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    ipcidr:
+      - 240.0.0.0/4
+
+# ==================== TUN 模式（可选）====================
+# 推荐通过环境变量 TUN_ENABLED=true 启用 TUN 模式，重启后自动恢复。
+# 注意：设置 TUN_ENABLED 后，下方手动配置将被覆盖，以环境变量为准。
+# 启用 TUN 模式还需要：Docker 容器的 NET_ADMIN 权限及 /dev/net/tun 设备。
+# 若通过 Dashboard UI 手动开启 TUN，重启后状态不会保留，建议使用 TUN_ENABLED。
+# tun:
+#   enable: true
+#   stack: mixed          # 可选: system / gvisor / mixed
+#   auto-route: true
+#   auto-redirect: true      # NAS 报 netlink 错误时可设置 TUN_AUTO_REDIRECT=false
+#   auto-detect-interface: true
+
+# ==================== 代理节点 ====================
+proxies:
+  # VMess 示例
+  - name: '示例节点-VMess'
+    type: vmess
+    server: example.com
+    port: 443
+    uuid: your-uuid-here
+    alterId: 0
+    cipher: auto
+    tls: true
+    skip-cert-verify: false
+    network: ws
+    ws-opts:
+      path: /path
+      headers:
+        Host: example.com
+
+  # Shadowsocks 示例
+  - name: '示例节点-SS'
+    type: ss
+    server: example.com
+    port: 8388
+    cipher: aes-256-gcm
+    password: your-password-here
+
+  # Trojan 示例
+  - name: '示例节点-Trojan'
+    type: trojan
+    server: example.com
+    port: 443
+    password: your-password-here
+    sni: example.com
+    skip-cert-verify: false
+
+# ==================== 代理组 ====================
+proxy-groups:
+  # ----- Smart 策略组（Smart 内核专属） -----
+  # Smart 组会根据延迟、丢包率、ASN 自动选择最佳节点，
+  # 可选参数：
+  #   tolerance      延迟差值容差（ms），防止抖动（默认 50）
+  #   prefer-asn     强制先按 ASN 选择节点（默认 false）
+  #   policy-priority "Premium:0.9;SG:1.3" 形式的优先级（pattern:weight）
+  #   uselightgbm    使用 LightGBM 模型预测权重（需把 Model.bin 放到配置目录，默认 false）
+  #   collectdata    采集训练数据（默认 false）
+  - name: 🚀 Smart
+    type: smart
+    tolerance: 50
+    prefer-asn: true
+    proxies:
+      - DIRECT
+      - 示例节点-VMess
+      - 示例节点-SS
+      - 示例节点-Trojan
+
+  # ----- 常规 select 组 -----
+  - name: 🎯 全球直连
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 Smart
+
+  - name: 🛑 广告拦截
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+
+  - name: ♻️ 自动选择
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+    proxies:
+      - 示例节点-VMess
+      - 示例节点-SS
+      - 示例节点-Trojan
+
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🚀 Smart
+      - 🎯 全球直连
+      - ♻️ 自动选择
+
+# ==================== 分流规则 ====================
+rules:
+  # 直连规则
+  - DOMAIN-SUFFIX,cn,🎯 全球直连
+  - DOMAIN-KEYWORD,baidu,🎯 全球直连
+  - DOMAIN-KEYWORD,alibaba,🎯 全球直连
+  - DOMAIN-KEYWORD,tencent,🎯 全球直连
+
+  # 广告拦截
+  - DOMAIN-KEYWORD,adservice,🛑 广告拦截
+  - DOMAIN-SUFFIX,googlesyndication.com,🛑 广告拦截
+
+  # 代理规则
+  - DOMAIN-SUFFIX,google.com,🚀 Smart
+  - DOMAIN-SUFFIX,youtube.com,🚀 Smart
+  - DOMAIN-SUFFIX,github.com,🚀 Smart
+  - DOMAIN-SUFFIX,twitter.com,🚀 Smart
+  - DOMAIN-SUFFIX,telegram.org,🚀 Smart
+
+  # GeoIP 规则
+  - GEOIP,LAN,🎯 全球直连
+  - GEOIP,CN,🎯 全球直连
+
+  # 兜底规则
+  - MATCH,🐟 漏网之鱼
