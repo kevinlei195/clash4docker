@@ -510,16 +510,79 @@ bash tests/test_modules.sh
 mihomo -t -d /tmp -f clash4docker-smart/config.example.yaml   # 需要 mihomo 二进制在 PATH
 ```
 
-容器构建与烟雾测试在 Docker daemon 可用时：
+### 标准构建（网络可达 GitHub）
 
 ```bash
 cd /workspace/userspace/clash4docker
 docker buildx build --platform linux/amd64 --load \
   -t clash4docker-smart-local clash4docker-smart/
-
-# 注意：实际 smoke 测试直接复用 tests/test_container.sh 会按 7890/7891/7892 启动，
-# 新镜像容器名是 glash-smart，请手工指定容器名执行命令，或参考 ../tests/test_container.sh 改造。
 ```
+
+### 国内/受限制网络构建
+
+子项目自带 **`Dockerfile.cn` + `build-cn.sh`**：
+
+| 资源 | 用途 |
+| --- | --- |
+| `Dockerfile.cn` | 临时镜像版：`https://github.com/*` 全部走 `https://gh-proxy.com`、Alpine apk 源切到 `https://mirrors.aliyun.com` |
+| `build-cn.sh`     | 一键脚本：探活代理 → 重新生成 `Dockerfile.cn` → `docker buildx build` → 校验内核版本 |
+
+**为什么需要 Dockerfile.cn 而不是直接往主 Dockerfile 加镜像代理？**
+
+- 仓库主分支应该保持与上游 GitHub/Docker Hub 直连（CI 与海外用户稳定）
+- 镜像代理由 `gh-proxy.com` 等第三方提供，不稳定、不应进版本控制
+- `Dockerfile.cn` 是**生成产物**，可重复再生成；修改 `Dockerfile` 后跑 `./build-cn.sh --dry-run` 即可同步
+
+**用法**：
+
+```bash
+cd /workspace/userspace/clash4docker/clash4docker-smart
+
+# 默认 amd64,代理 = gh-proxy.com
+./build-cn.sh
+
+# 仅重新生成 Dockerfile.cn 不构建
+./build-cn.sh --dry-run
+
+# arm64 / 指定其它代理 / 加冒烟测试
+./build-cn.sh --platform arm64
+./build-cn.sh --proxy https://ghfast.top
+./build-cn.sh --smoke                      # 构建后跑一次容器冒烟测试
+
+# 完整参数
+./build-cn.sh --help
+```
+
+> `./build-cn.sh` 默认不加 `--smoke`，避免与正在运行的 `clash-glash` 容器在 7890/7891/9090 端口冲突；如要启用，需先把示例 `config.example.yaml` 拷到 `/tmp/` 并手动改端口到 7895/7896/7897/9095（脚本已自动做）。
+
+### 烟雾测试（三项核心 API 校验）
+
+确认构建出的镜像确实是 **Smart 内核**（不是 Meta 内核）：
+
+```bash
+# 1) /version 应返回 alpha-smart-*
+curl -H "Authorization: Bearer <SECRET>" http://127.0.0.1:9090/version
+# 期望: {"meta":true,"version":"alpha-smart-83e67d0"}
+
+# 2) Smart 专属 API /group/weights (Meta 内核无此路径)
+curl -H "Authorization: Bearer <SECRET>" http://127.0.0.1:9090/group/weights
+# 期望: {"errors":{},"weights":{"🚀 Smart":null}}
+
+# 3) /group 列表中应出现 type 为 "Smart" 的策略组
+curl -H "Authorization: Bearer <SECRET>" http://127.0.0.1:9090/group | \
+  python3 -c "import json,sys; d=json.load(sys.stdin); \
+              [print(g['type'], g['name']) for g in d['proxies'] if g['type']=='Smart']"
+# 期望: Smart 🚀 Smart
+```
+
+启动日志里也要看到：
+
+```text
+Start initial compatible provider 🚀 Smart
+[TCP] mihomo --> your-subscription-url:443 match Match using 🚀 Smart[示例节点-SS]
+```
+
+详细验证记录与一次性脚本请参考 [`../docs/development/build-in-china.md`](../docs/development/build-in-china.md) 的"端到端验证记录"段。
 
 ---
 
