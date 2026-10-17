@@ -31,5 +31,6 @@
 
 - [运行时结构](./development/runtime-structure.md) — `start.sh` / `lib/glash/` 模块划分
 - [本地开发与验证](./development/local-development.md) — Shell 检查、回归测试、本地构建
+- [国内构建指南](./development/build-in-china.md) — 国内网络环境下的镜像构建、推送与 Git 推送方案
 - [CI 检查](./development/ci.md) — Pull Request CI 层级、文档-only 策略、合并门禁
 - [项目规划](./plans/) — 重大变更的实现规划文档

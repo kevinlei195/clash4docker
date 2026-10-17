@@ -108,6 +108,7 @@ docker logs -f glash
 | 环境变量与配置参考 | [`docs/configuration/`](./docs/configuration/) |
 | 运维命令与故障排查 | [`docs/operations/`](./docs/operations/) |
 | 运行时结构与本地开发 | [`docs/development/`](./docs/development/) |
+| 国内构建指南(国内网络) | [`docs/development/build-in-china.md`](./docs/development/build-in-china.md) |
 | PR CI 门禁 | [`docs/development/ci.md`](./docs/development/ci.md) |
 | 完整文档目录 | [`docs/README.md`](./docs/README.md) |
 
