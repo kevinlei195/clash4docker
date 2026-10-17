@@ -1,11 +1,9 @@
 # Clash for Docker(glash)
 
-[![GitHub Stars](https://img.shields.io/github/stars/gangz1o/clash4docker?style=for-the-badge)](https://github.com/gangz1o/clash4docker/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/gangz1o/clash4docker?style=for-the-badge)](https://github.com/gangz1o/clash4docker/forks)
-[![GitHub Issues](https://img.shields.io/github/stars/gangz1o/clash4docker/issues?style=for-the-badge)](https://github.com/gangz1o/clash4docker/issues)
-[![Docker Pulls](https://img.shields.io/docker/pulls/gangz1o/glash?style=for-the-badge)](https://hub.docker.com/r/gangz1o/glash)
-
 基于 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核、内置 [MetacubexD](https://github.com/MetaCubeX/metacubexd) Dashboard 的多架构 Docker 镜像。
+
+Dockerhub
+https://hub.docker.com/r/gangz1o/glash
 
 ## 项目组成
 
