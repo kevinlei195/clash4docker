@@ -18,6 +18,8 @@
 
 - [环境变量完整参考](./configuration/environment-variables.md) — 运行环境、订阅、持久覆写、端口映射
 - [订阅更新机制](./configuration/subscription-update.md) — 启动流程、定时更新、手动更新
+- [内核选择](./configuration/kernel-selection.md) — `KERNEL=standard|smart` 运行时切换
+- [构建变体](./configuration/build-flavors.md) — `FLAVORS` 构建参数,自定义打包哪些内核
 - [TUN 模式](./configuration/tun-mode.md) — TUN 启用与网络边界
 - [订阅后自定义 Hook](./configuration/hooks.md) — 在订阅配置上执行自定义脚本
 

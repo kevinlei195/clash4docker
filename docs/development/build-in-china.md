@@ -6,7 +6,7 @@
 
 国内网络环境下面临三类连通性问题:
 
-1. **GitHub 资源下载** — `Dockerfile` 在 `builder` 阶段需要从 `github.com` 下载 Mihomo 内核、MetacubexD Dashboard 和 GeoData
+1. **GitHub 资源下载** — `Dockerfile` 在 builder 阶段通过 `docker/build-helpers/download-*.sh` 从 `github.com` 下载 Mihomo 内核、MetacubexD Dashboard 和 GeoData
 2. **Docker 基础镜像拉取** — `alpine:3.19` 默认从 `docker.io` 拉取
 3. **镜像推送与 Git 推送** — Docker Hub 推送、Gitea SSH 等连通性
 
@@ -329,135 +329,13 @@ git push-all master
 
 ---
 
-## clash4docker-smart 子项目
+## Smart 内核构建
 
-`clash4docker-smart/` 是基于 `vernesong/mihomo`(Smart 策略组 fork)的变体,Dockerfile 结构与主项目一致,所有 GitHub 资源同上,**适用本文所有方案**。
+Smart 内核已整合进主镜像,通过 `KERNEL=smart` 环境变量启用。详细用法见 [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md)。
 
-主要区别:
+如果只需要 Smart 内核(缩减镜像体积),构建时指定 `--build-arg FLAVORS=smart` 或 `=standard`/`=both`。参数说明见 [`../configuration/build-flavors.md`](../configuration/build-flavors.md)。
 
-- Mihomo 来源为 `https://github.com/vernesong/mihomo/releases/download/...` 而非 `MetaCubeX/mihomo`
-- Release 通道为 `Prerelease-Alpha`(Pre-release,非 SemVer)
-- 资产命名:`mihomo-linux-${ARCH}-alpha-smart-${MIHOMO_SHORT_SHA}.gz`
-
-镜像代理 URL 模板同样为:`https://gh-proxy.com/<原 URL>`
-
-### 端到端验证记录 (2026-10-17)
-
-本节是一次完整的国内网络环境构建验证记录,可作为本文方案的实证参考。
-
-**镜像代理探活结果**:
-
-| 代理 | HEAD `github.com/vernesong/mihomo/releases` 状态 |
-| --- | :---: |
-| `https://gh-proxy.com` | `200` |
-| `https://ghfast.top` | `403` |
-| `https://mirror.ghproxy.com` | 不可达 |
-
-→ **本次构建选用 `gh-proxy.com`**。 其余代理可作 fallback。
-
-**一步构建脚本**(完整可复制执行):
-
-```bash
-PROXY="https://gh-proxy.com"
-mkdir -p /tmp/smart-build && cd /tmp/smart-build
-
-# 生成临时 Dockerfile(将所有 github.com URL 改写,注入国内 apk 源)
-python3 - <<PY
-src = open('/path/to/clash4docker/clash4docker-smart/Dockerfile').read()
-src = src.replace(
-    "RUN apk add --no-cache curl unzip ca-certificates",
-    "RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories "
-    "&& apk update >/dev/null "
-    "&& apk add --no-cache curl unzip ca-certificates",
-    1)
-src = src.replace(
-    "RUN apk add --no-cache ca-certificates tzdata bash tini curl sed grep flock",
-    "RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories "
-    "&& apk update >/dev/null "
-    "&& apk add --no-cache ca-certificates tzdata bash tini curl sed grep flock",
-    1)
-src = src.replace("https://github.com", "${PROXY}/https://github.com")
-# 还原 LABEL 中被误改的 image.source(不是 URL 下载点)
-src = src.replace(
-    "${PROXY}/".replace("\${PROXY}", PROXY) + "https://github.com/gangz1o/clash4docker",
-    "https://github.com/gangz1o/clash4docker")
-open('Dockerfile.cn','w').write(src)
-PY
-
-# 把 start.sh / lib 拷到构建上下文
-cp /path/to/clash4docker/clash4docker-smart/start.sh .
-cp -r /path/to/clash4docker/clash4docker-smart/lib .
-
-# 构建 amd64
-docker buildx build --platform linux/amd64 --load \
-  -t clash4docker-smart-local -f Dockerfile.cn .
-```
-
-**构建产物** `clash4docker-smart-local:latest`,159 MB。
-
-**冒烟测试**(注意:避开与主 `clash-glash` 容器端口冲突 — 它已经占用 7890/7891/9090):
-
-```bash
-mkdir -p /tmp/smart-smoke/config
-cp /path/to/clash4docker/clash4docker-smart/config.example.yaml \
-   /tmp/smart-smoke/config/config.yaml
-
-# 把示例端口改到非冲突端口(主项目占用 7890/7891/9090)
-sed -i -e 's|^port: 7890|port: 7895|' \
-       -e 's|^socks-port: 7891|socks-port: 7896|' \
-       -e 's|^mixed-port: 7892|mixed-port: 7897|' \
-       -e 's|0.0.0.0:9090|0.0.0.0:9095|' \
-       /tmp/smart-smoke/config/config.yaml
-
-docker run -d --rm --name glash-smart-smoke \
-  --network=host \
-  -v /tmp/smart-smoke/config:/root/.config/mihomo \
-  -e TZ=Asia/Shanghai -e SECRET=smart-smoke \
-  clash4docker-smart-local:latest
-```
-
-**验证三件事(用以确证确实是 Smart 内核,而非 Meta 内核)**:
-
-```bash
-# 1. /version 应返回 alpha-smart-*,而 Meta 内核返回 v1.19.31 / v1.19.x
-curl -H "Authorization: Bearer smart-smoke" http://127.0.0.1:9095/version
-# {"meta":true,"version":"alpha-smart-83e67d0"}
-
-# 2. Smart 专属 API /group/weights(只在 Smart 内核存在)
-curl -H "Authorization: Bearer smart-smoke" http://127.0.0.1:9095/group/weights
-# {"errors":{},"weights":{"🚀 Smart":null}}
-
-# 3. /group 列表中应能看到 type 为 "Smart" 的组(而非 URLTest/Select)
-curl -H "Authorization: Bearer smart-smoke" http://127.0.0.1:9095/group | jq '.proxies[] | select(.type=="Smart")'
-# { "type": "Smart", "name": "🚀 Smart", ... }
-```
-
-**预期看到的容器日志特征**:
-
-```
-Initial configuration complete, total time: 160ms
-🚀 正在启动 mihomo...
-Start initial compatible provider 🚀 Smart
-...
-[TCP] mihomo --> your-subscription-url:443 match Match using 🚀 Smart[示例节点-SS]
-```
-
-第 4 行 `Start initial compatible provider 🚀 Smart` 与第 5 行 Smart 组实际命中流量,是 Smart 内核接收 `type: smart` 策略组的最强证据 — Meta 内核会在 `validate_config_with_mihomo` 阶段抛出 `proxy group[0]: unsupported type: smart`。
-
-### 端口冲突缓解
-
-主 `clash-glash` 容器(根据 `docker ps` 显示)在 host 网络模式下运行,已占用 7890/7891/9090。smart 冒烟测试时务必换端口 — 见上文 `sed` 段落,或直接传环境变量:
-
-```bash
-docker run -d --rm --name glash-smart-smoke \
-  --network=host \
-  -v /tmp/smart-smoke/config:/root/.config/mihomo \
-  -e TZ=Asia/Shanghai -e SECRET=smart-smoke \
-  -e HTTP_PORT=7895 -e SOCKS_PORT=7896 -e MIXED_PORT=7897 \
-  clash4docker-smart-local:latest
-```
-
-> 注:`external-controller` (Dashboard 端口)当前不在 `lib/glash` 覆写范围内 — 如要变更,改 `config.yaml` 内的 `external-controller: 0.0.0.0:9095` 即可。
+Smart 内核资产命名 `mihomo-linux-${ARCH}-alpha-smart-${MIHOMO_SHORT_SHA_SMART}.gz`,Mihomo 上游为 `https://github.com/vernesong/mihomo/releases/download/${MIHOMO_TAG_SMART}/...`,构建时由 `docker/build-helpers/download-mihomo.sh` 拼装。所有方案 A-E 中的 GitHub 资源下载策略对 Smart 内核同样适用 — 镜像代理 URL 模板仍为 `https://gh-proxy.com/<原 URL>`。
 
 ---
 

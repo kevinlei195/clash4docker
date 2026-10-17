@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | `TZ` | `Asia/Shanghai` | 容器时区,也决定 cron 的执行时间 |
 | `SAFE_PATHS` | 空 | 追加传给 Mihomo 的安全路径,多个容器内路径用冒号分隔;仅在配置引用挂载目录时需要 |
+| `KERNEL` | `standard` | 选择 mihomo 内核:`standard`(MetaCubeX/Mihomo) / `smart`(vernesong/mihomo Smart fork)。切换后不会自动重启容器,需要 `docker compose up -d` 显式重启。详见 [`kernel-selection.md`](./kernel-selection.md) |
 
 ## 订阅与更新
 

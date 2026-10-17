@@ -5,14 +5,18 @@
 Dockerhub
 https://hub.docker.com/r/gangz1o/glash
 
-## 项目组成
+## 内核选择
 
-| 子项目 | 目录 | 镜像 | 内核 |
-| --- | --- | --- | --- |
-| `clash4docker`（默认） | [`./`](../) | `gangz1o/glash` | `MetaCubeX/mihomo` 标准版 |
-| `clash4docker-smart` | [`./clash4docker-smart`](./clash4docker-smart) | `gangz1o/glash-smart` | `vernesong/mihomo` Smart fork（`type: smart`、ASN 偏好、可选 LightGBM） |
+单一镜像 `gangz1o/glash:latest` 默认包含两个内核二进制,运行时通过环境变量 `KERNEL` 选择(默认 `standard`):
 
-两者共享相同的运行时脚本（订阅、热加载、TUN、Hook、定时任务），差异只在内核二进制。Smart 版的用法说明与差异表见 [clash4docker-smart/README.md](./clash4docker-smart/README.md)。
+| `KERNEL` | 内核来源 | 特性 |
+| --- | --- | --- |
+| `standard`(默认) | `MetaCubeX/mihomo` | Mihomo 标准版 |
+| `smart` | `vernesong/mihomo`(Smart fork) | `type: smart` 策略组、ASN 偏好、可选 LightGBM |
+
+切换时不会自动重启容器,请显式 `docker compose up -d` 重启。Smart 内核的差异与用法见 [`docs/configuration/kernel-selection.md`](./docs/configuration/kernel-selection.md)。
+
+如需缩减镜像体积,可自建时传入 `--build-arg FLAVORS=standard` 或 `=smart`,只打包单内核。详见 [`docs/configuration/build-flavors.md`](./docs/configuration/build-flavors.md)。
 
 项目同时支持远程订阅和本地配置。订阅下载后会先在候选文件中完成环境变量覆写、自定义 Hook 和 Mihomo 原生校验;全部成功才替换当前配置。定时更新使用 Controller 热加载,失败时保留或恢复旧配置,不会为了更新订阅主动重启容器。
 
@@ -94,6 +98,7 @@ docker logs -f glash
 | `MODE` | 空 | 固定 Mihomo 运行模式:`rule` / `global` / `direct` |
 | `HTTP_PORT` / `SOCKS_PORT` / `MIXED_PORT` | 空 | 固定端口,避免订阅刷新覆盖 |
 | `TUN_ENABLED` | 空 | `true` 时持久开启 TUN |
+| `KERNEL` | `standard` | 选择 mihomo 内核 (`standard`/`smart`);切换后请 `docker compose up -d` 重启容器 |
 
 未列出的可选覆写项会保留订阅或本地配置中的原值。
 
