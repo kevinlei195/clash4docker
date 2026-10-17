@@ -3,6 +3,11 @@
 start_mihomo() {
     local pid
 
+    if ! resolve_mihomo_binary; then
+        return 1
+    fi
+    verify_mihomo_binary || return 1
+
     log_info "🚀 正在启动 mihomo..."
     SAFE_PATHS="${SAFE_PATHS:+${SAFE_PATHS}:}${UI_DIR}" \
         "${MIHOMO_BIN}" -d "${CONFIG_DIR}" -ext-ui "${UI_DIR}" &
