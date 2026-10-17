@@ -31,6 +31,9 @@ RUN apk add --no-cache curl unzip ca-certificates
 WORKDIR /build
 COPY docker/build-helpers/ /tmp/h/
 
+# 预创建两个目标目录,使 COPY 在 FLAVORS 不包含某个内核时也能找到源路径(取空)。
+RUN mkdir -p /build/mihomo-standard /build/mihomo-smart
+
 # 标准内核
 RUN case "${FLAVORS}" in \
         standard|both) \

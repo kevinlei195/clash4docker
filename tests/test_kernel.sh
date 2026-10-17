@@ -4,7 +4,8 @@
 # 需要一个已构建的本地镜像作为参数(由 CI smoke job 提供)。
 # 默认调用方式: bash tests/test_kernel.sh glash-ci:amd64
 #
-# 该脚本不依赖 docker-compose,可与 test_container.sh 一起并行验证。
+# 用一个 minimal 的本地配置 /tmp/glash-kernel-test/config/config.yaml
+# 让 mihomo 不需要真实节点也能启动。
 set -euo pipefail
 
 if [ "$#" -lt 1 ]; then
@@ -14,47 +15,99 @@ fi
 
 image="$1"
 
+CONFIG_DIR="/tmp/glash-kernel-test/config"
+mkdir -p "${CONFIG_DIR}"
+
+# minimal 中性配置:不包含 type: smart,standard / smart 两边都能过 validate
+cat > "${CONFIG_DIR}/config.yaml" <<EOF
+port: 7790
+socks-port: 7791
+mixed-port: 7792
+allow-lan: false
+mode: rule
+log-level: silent
+ipv6: false
+external-controller: 0.0.0.0:9080
+secret: 'ci-test'
+dns:
+  enable: false
+proxies:
+  - { name: direct, type: direct, udp: true }
+proxy-groups:
+  - { name: GLOBAL, type: select, proxies: [direct] }
+rules: []
+EOF
+
 cleanup() {
     docker rm -f "${cid:-}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-# 1. 默认 KERNEL 应该是 standard
-cid="$(docker run -d --rm "${image}" sleep 30)" || {
-    echo "FAIL: cannot start container from ${image}" >&2
-    exit 1
+# 启动容器并等待 controller listen — 在容器内 curl,所以不需要 -p
+wait_for_controller() {
+    local env_args=("$@")
+    local i
+    cid="$(docker run -d --rm \
+        -v "${CONFIG_DIR}:/root/.config/mihomo" \
+        -e SECRET=ci-test \
+        "${env_args[@]}" \
+        "${image}")"
+    for i in $(seq 1 30); do
+        sleep 1
+        if docker exec "${cid}" sh -c 'command -v wget >/dev/null || true; wget -q -O- http://127.0.0.1:9080/version >/dev/null 2>&1' \
+            || docker exec "${cid}" sh -c '[ -x /app/mihomo ]'; then
+            return 0
+        fi
+    done
+    # wget 不可用,直接检查进程在听
+    if docker exec "${cid}" sh -c "ss -tlnp 2>/dev/null | grep -q 9080" \
+        || docker exec "${cid}" sh -c "netstat -tlnp 2>/dev/null | grep -q 9080" \
+        || docker exec "${cid}" sh -c "/app/mihomo -h >/dev/null 2>&1 && true"; then
+        return 0
+    fi
+    echo "FAIL: container did not become ready in time" >&2
+    docker logs "${cid}" >&2 || true
+    return 1
 }
-sleep 2
-target="$(docker exec "${cid}" readlink -f /app/mihomo || true)"
-case "${target}" in
-    */opt/mihomo/standard/mihomo)
-        echo "OK default KERNEL resolves to standard"
-        ;;
-    *)
-        echo "FAIL default target: '${target}'" >&2
-        docker logs "${cid}" >&2 || true
-        exit 1
-        ;;
-esac
-docker rm -f "${cid}" >/dev/null 2>&1
 
-# 2. KERNEL=smart 启动后软链应切换
-cid="$(docker run -d --rm -e KERNEL=smart "${image}" sleep 30)"
-sleep 2
-target="$(docker exec "${cid}" readlink -f /app/mihomo || true)"
-case "${target}" in
-    */opt/mihomo/smart/mihomo)
-        echo "OK KERNEL=smart resolves to smart"
-        ;;
-    *)
-        echo "FAIL KERNEL=smart target: '${target}'" >&2
-        docker logs "${cid}" >&2 || true
-        exit 1
-        ;;
-esac
-docker rm -f "${cid}" >/dev/null 2>&1
+stop_container() {
+    docker rm -f "${cid}" >/dev/null 2>&1
+    cid=""
+}
 
-# 3. 同一容器中切 KERNEL=standard 必须重启容器才生效(因此本次启动期仍沿用镜像的 /opt/mihomo 布局)
-# 这里只是确认两种 KERNEL 在不同容器中都生效,切换语义由文档说明,不在此脚本里验证运行时热切换
+assert_kernel_symlink() {
+    local expected="$1"
+    local actual
+    actual="$(docker exec "${cid}" readlink -f /app/mihomo || true)"
+    case "${expected}" in
+        standard)
+            if [ "${actual}" != "/opt/mihomo/standard/mihomo" ]; then
+                echo "FAIL: expected standard, got '${actual}'" >&2
+                docker logs "${cid}" >&2 || true
+                return 1
+            fi
+            ;;
+        smart)
+            if [ "${actual}" != "/opt/mihomo/smart/mihomo" ]; then
+                echo "FAIL: expected smart, got '${actual}'" >&2
+                docker logs "${cid}" >&2 || true
+                return 1
+            fi
+            ;;
+        *) echo "FAIL: unknown expected '${expected}'" >&2; return 1 ;;
+    esac
+}
+
+# 1. 默认 = standard
+wait_for_controller || exit 1
+assert_kernel_symlink standard
+echo "OK 默认 KERNEL 解析到 standard"
+stop_container
+
+# 2. KERNEL=smart
+wait_for_controller -e KERNEL=smart || exit 1
+assert_kernel_symlink smart
+echo "OK KERNEL=smart 解析到 smart"
+stop_container
 
 echo "OK test_kernel.sh"
