@@ -15,7 +15,7 @@ on:
       - master
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}-${{ matrix.project }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -31,14 +31,14 @@ jobs:
       runtime: ${{ steps.filter.outputs.runtime }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Detect runtime changes
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@v3
         with:
           predicate-quantifier: every
         filters: |
@@ -50,19 +50,12 @@ jobs:
             - '!docs/**'
 
   shell:
-    name: Shell tests (${{ matrix.project }})
+    name: Shell tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        project: [clash4docker, clash4docker-smart]
-    defaults:
-      run:
-        working-directory: ${{ matrix.project }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
@@ -89,39 +82,52 @@ jobs:
       - name: Run module regression tests
         run: bash tests/test_modules.sh
 
+      - name: Run kernel selection tests
+        run: bash tests/test_kernel.sh
+
   smoke:
-    name: AMD64 runtime smoke (${{ matrix.project }})
+    name: AMD64 runtime smoke
     needs: changes
     if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        project: [clash4docker, clash4docker-smart]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build AMD64 image
-        uses: docker/build-push-action@v7
+      - name: Build AMD64 both-kernels image
+        uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.project }}
+          context: .
           platforms: linux/amd64
-          tags: ${{ matrix.project }}-ci:amd64
+          tags: glash-ci:amd64
           load: true
           push: false
+          build-args: FLAVORS=both
 
-      - name: Run AMD64 container smoke test
-        run: bash tests/test_container.sh ${{ matrix.project }}-ci:amd64
+      - name: Run AMD64 container smoke test (both kernels)
+        run: bash tests/test_container.sh glash-ci:amd64
+
+      - name: Build AMD64 standard-only image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          tags: glash-ci-standard:amd64
+          load: true
+          push: false
+          build-args: FLAVORS=standard
+
+      - name: Run standard-only smoke (KERNEL=smart should fail)
+        run: bash tests/test_kernel_absence.sh glash-ci-standard:amd64
 
   build:
-    name: Build ${{ matrix.platform }} (${{ matrix.project }})
+    name: Build ${{ matrix.platform }} (FLAVORS=${{ matrix.flavors }})
     needs: changes
     if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
@@ -133,27 +139,30 @@ jobs:
           - linux/amd64
           - linux/arm64
           - linux/arm/v7
-        project: [clash4docker, clash4docker-smart]
+        flavors:
+          - both
+          - standard
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Set up QEMU
         if: matrix.platform != 'linux/amd64'
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build ${{ matrix.platform }} image (${{ matrix.project }})
-        uses: docker/build-push-action@v7
+      - name: Build ${{ matrix.platform }} image
+        uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.project }}
+          context: .
           platforms: ${{ matrix.platform }}
           push: false
           outputs: type=cacheonly
+          build-args: FLAVORS=${{ matrix.flavors }}
 
   ci-gate:
     name: CI Gate

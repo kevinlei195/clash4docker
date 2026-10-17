@@ -10,23 +10,13 @@ jobs:
     permissions:
       contents: read
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        project:
-          - project: clash4docker
-            image_name: gangz1o/glash
-            tag_suffix: ''
-          - project: clash4docker-smart
-            image_name: gangz1o/glash-smart
-            tag_suffix: '-smart'
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name }}  # 关键：检出这个特定Tag的代码
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Extract version from Release Tag
         id: version
@@ -34,8 +24,7 @@ jobs:
           RELEASE_TAG="${{ github.event.release.tag_name }}"
           NEW_VERSION="${RELEASE_TAG#v}"
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "new_tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-          echo "image_tag=${{ github.event.release.tag_name }}${{ matrix.project.tag_suffix }}" >> $GITHUB_OUTPUT
+          echo "image_tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -49,17 +38,19 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (both kernels)
         uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.project.project }}
+          context: .
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
+          build-args: FLAVORS=both
           tags: |
-            docker.io/${{ matrix.project.image_name }}:latest
-            docker.io/${{ matrix.project.image_name }}:${{ steps.version.outputs.image_tag }}
+            docker.io/gangz1o/glash:latest
+            docker.io/gangz1o/glash:${{ steps.version.outputs.image_tag }}
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.new_version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.flavors=standard,smart
           cache-from: type=gha
           cache-to: type=gha,mode=max
