@@ -397,6 +397,29 @@ docker exec <容器> readlink -f /app/mihomo
 
 </details>
 
+## 交互式构建脚本
+
+仓库提供 `scripts/build-interactive.sh` 通过问答引导选择 build-arg,最后生成并执行 `docker buildx build`。零依赖,纯 Bash,在终端里直接跑即可。
+
+```bash
+./scripts/build-interactive.sh                       # 简单模式:问 FLAVORS / UI / tag / platform / 加载方式
+./scripts/build-interactive.sh --advanced            # 高级模式:展开全部 7 个 build-arg
+./scripts/build-interactive.sh --dry-run             # 只打印命令,不真构建
+./scripts/build-interactive.sh --flavors smart --ui zashboard --tag my:zas
+./scripts/build-interactive.sh --push --user gangz1o  # 推送到 Docker Hub
+./scripts/build-interactive.sh --platform linux/arm64,linux/amd64
+./scripts/build-interactive.sh --help               # 全部参数说明
+```
+
+特性:
+
+- 复用或自动创建 `glash-builder`(docker-container driver)以获得 BuildKit 缓存
+- 命令行参数可与交互混用;非 TTY 场景下走默认或命令行覆盖
+- `--dry-run` 输出完整 `docker buildx build` 命令,便于 CI / 调试
+- 校验:FLAVORS 取值、UI 取值、平台、tag 字符、SemVer、SHA 格式
+
+`tests/test_build_interactive.sh` 覆盖 14 条断言(帮助文本、覆盖语义、错误校验、tag 拼接、多平台等),CI shell job 会自动跑。
+
 ## 相关文档
 
 | 主题 | 文档 |
