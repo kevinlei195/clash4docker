@@ -12,7 +12,7 @@
 | 必备 secret | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` | 无 |
 | 默认缓存 | GitHub Actions 用 GHA cache,Gitea 暂未启用 | 不使用(除非手动指定) |
 
-两个姿势共用同一个 `Dockerfile`,运行时内核选择通过环境变量 `KERNEL=standard|smart`,构建期参数通过 `FLAVORS=standard|smart|both`。详见 [`../configuration/build-flavors.md`](../configuration/build-flavors.md) 与 [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md)。
+两个姿势共用同一个 `Dockerfile`,运行时内核选择通过环境变量 `KERNEL=standard|smart`,构建期参数通过 `FLAVORS=standard|smart|both` 与 `UI=metacubexd|zashboard`。详见 [`../configuration/build-flavors.md`](../configuration/build-flavors.md) 与 [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md)。
 
 ---
 
@@ -99,7 +99,8 @@ Gitea 仓库 **Settings → Secrets** 添加 `DOCKERHUB_USERNAME` 与 `DOCKERHUB
 | --- | --- |
 | 标准内核版本(MetaCubeX/mihomo) | `Dockerfile` 改 `ARG MIHOMO_VERSION=vX.Y.Z` |
 | Smart 内核 SHA(vernesong/mihomo) | `Dockerfile` 改 `ARG MIHOMO_SHORT_SHA_SMART=<sha>`;若 release 通道变了再调 `MIHOMO_TAG_SMART` |
-| MetacubexD Dashboard | `Dockerfile` 改 `ARG METACUBEXD_VERSION=vX.Y.Z` |
+| MetacubexD Dashboard | `Dockerfile` 改 `ARG METACUBEXD_VERSION=vX.Y.Z`(`UI=metacubexd` 时生效) |
+| zashboard Dashboard | `Dockerfile` 改 `ARG ZASHBOARD_VERSION=vX.Y.Z`(`UI=zashboard` 时生效) |
 | buildx action 版本 | `.github/workflows/*.yml`、`.gitea/workflows/*.yml` 中的 `actions/checkout` / `docker/build-push-action` 版本号 |
 | alpine 基础镜像 | `Dockerfile` 两处 `FROM alpine:X.Y`(builder 与 runtime),保持一致 |
 
@@ -189,6 +190,21 @@ services:
       args:
         FLAVORS: standard
 ```
+
+### 3.5 zashboard 镜像(自建,官方不发布)
+
+官方 `gangz1o/glash:latest` 只打包 metacubexd。需要 zashboard 走自建:
+
+```bash
+docker buildx build --builder glash-builder \
+  --build-arg FLAVORS=both \
+  --build-arg UI=zashboard \
+  --platform linux/amd64 \
+  --load \
+  -t my/glash:zashboard .
+```
+
+镜像内 zashboard 自动展平到 `/app/ui/`,mihomo 通过 `:9090/ui` 暴露。运行时不需要任何额外配置,默认行为与 metacubexd 镜像完全一致。
 
 ### 4. 跨平台构建
 

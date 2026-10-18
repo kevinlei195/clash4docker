@@ -1,5 +1,5 @@
 # glash - Clash Docker 镜像
-# 基于 Mihomo 内核 + MetacubexD Dashboard
+# 基于 Mihomo 内核 + 多种 Dashboard
 # 作者: gangz1o
 #
 # 通过 FLAVORS build-arg 决定镜像包含的内核,可选项:
@@ -7,23 +7,31 @@
 #   smart     - 仅 Smart 内核(vernesong/mihomo)
 #   both      - 同时打包两种(默认)
 #
+# 通过 UI build-arg 决定打包的 Dashboard:
+#   metacubexd - MetaCubeX/metacubexd(默认)
+#   zashboard  - Zephyruso/zashboard
+#
 # 运行时通过 KERNEL 环境变量在 standard 与 smart 之间切换
 # (默认 standard)。切换 KERNEL 不会重启容器,需要用户显式重启。
 
 ARG FLAVORS=both
+ARG UI=metacubexd
 ARG MIHOMO_VERSION=v1.19.31
 ARG MIHOMO_REPO_SMART=vernesong/mihomo
 ARG MIHOMO_TAG_SMART=Prerelease-Alpha
 ARG MIHOMO_SHORT_SHA_SMART=83e67d0
 ARG METACUBEXD_VERSION=v1.273.1
+ARG ZASHBOARD_VERSION=v3.29.1
 
 FROM --platform=$BUILDPLATFORM alpine:3.19 AS builder
 ARG FLAVORS
+ARG UI
 ARG MIHOMO_VERSION
 ARG MIHOMO_REPO_SMART
 ARG MIHOMO_TAG_SMART
 ARG MIHOMO_SHORT_SHA_SMART
 ARG METACUBEXD_VERSION
+ARG ZASHBOARD_VERSION
 ARG TARGETARCH
 
 RUN apk add --no-cache curl unzip ca-certificates
@@ -49,15 +57,17 @@ RUN case "${FLAVORS}" in \
     esac
 
 # Dashboard + GeoIP / GeoSite / Country.mmdb
-RUN /tmp/h/download-assets.sh "${METACUBEXD_VERSION}"
+RUN /tmp/h/download-assets.sh "${UI}" "${METACUBEXD_VERSION}" "${ZASHBOARD_VERSION}"
 
 # 最终镜像
 FROM alpine:3.19
 ARG FLAVORS
+ARG UI
 
 LABEL maintainer="gangz1o" \
-      description="Clash Docker with Mihomo Core and MetacubexD Dashboard - Subscription Support" \
-      org.opencontainers.image.flavors="${FLAVORS}"
+      description="Clash Docker with Mihomo Core and Dashboard - Subscription Support" \
+      org.opencontainers.image.flavors="${FLAVORS}" \
+      org.opencontainers.image.dashboard="${UI}"
 
 # 安装运行时依赖
 # curl: 用于下载订阅配置

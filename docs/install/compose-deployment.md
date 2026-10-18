@@ -213,6 +213,26 @@ docker compose -f docker-compose.second.yml up -d       # 第二实例(KERNEL=sm
 | 自带 Smart 内核 | 官方镜像已双打包,运行时由 `KERNEL=smart` 选择 |
 | (无) | `docker-compose.smart.yml` 模板可直接用 |
 
+### 5.3 切换 Dashboard(zashboard)
+
+官方 `gangz1o/glash:latest` 默认打包 metacubexd Dashboard。**官方不发布 zashboard 镜像**;需要 zashboard 走自建:
+
+```bash
+docker buildx build \
+  --build-arg FLAVORS=both \
+  --build-arg UI=zashboard \
+  --platform linux/amd64 \
+  -t my/glash:zashboard .
+```
+
+然后任一 compose 模板把 `image:` 改为 `my/glash:zashboard`,其余完全不动 — 镜像内 zashboard 自动展平到 `/app/ui/`,mihomo 通过 `:9090/ui` 暴露,运行时不需要任何额外配置。
+
+zashboard 与 metacubexd 的差异:
+
+- 自动后端检测:访问 `:9090/ui/` 会自动填好 backend
+- PWA:移动端"添加到主屏幕"获得类原生 app 体验
+- UI 资源更新需要自建时改 `ZASHBOARD_VERSION` 重新 build(zashboard 自带"升级 core" 按钮在 glash 镜像中不工作)
+
 ## 6. 验证清单
 
 任何模式启动后,建议依次做这些断言:

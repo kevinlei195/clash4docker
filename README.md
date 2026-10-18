@@ -24,7 +24,7 @@ https://hub.docker.com/r/gangz1o/glash
 
 ## 功能
 
-- Mihomo 与 MetacubexD 已打包进镜像
+- Mihomo 与 MetacubexD 已打包进镜像(自建可切到 zashboard,见 `docs/configuration/build-flavors.md`)
 - 支持 `linux/amd64`、`linux/arm64`、`linux/arm/v7`
 - 支持订阅首次下载、定时更新和手动更新
 - 订阅更新默认通过当前 Mihomo 本地代理完成
@@ -128,7 +128,18 @@ docker logs -f glash
 
 - [Mihomo](https://github.com/MetaCubeX/mihomo)
 - [MetacubexD](https://github.com/MetaCubeX/metacubexd)
+- [zashboard](https://github.com/Zephyruso/zashboard)
+- [gangz1o/glash](https://hub.docker.com/r/gangz1o/glash)
 
+## 相关链接
+
+- Mihomo: https://github.com/MetaCubeX/mihomo
+- Smart 内核: https://github.com/vernesong/mihomo
+- OpenClash: https://github.com/vernesong/OpenClash
+- metacubexd: https://github.com/metacubex/metacubexd
+- zashboard: https://github.com/Zephyruso/zashboard
+- Mihomo 文档: https://wiki.metacubex.one/
+- 规则集: https://github.com/Loyalsoldier/clash-rules
 
 ## License
 
