@@ -1,0 +1,71 @@
+# TUN 模式:容器内 mihomo 创建虚拟网卡,接管容器内流量。订阅/本地模式均可。
+#
+# 验证:`docker compose -f docker-compose.tun.yml up -d`
+#
+# 关键点:
+# - 必须 cap_add: NET_ADMIN + devices: /dev/net/tun
+# - 容器需启用特权或以 NET_ADMIN 能力运行
+# - TUN 仅修改容器自身网络命名空间,不会因 TUN_ENABLED=true 自动接管宿主机
+# - 宿主上额外路由/防火墙配置不在本模板范围,见 host / nas-bridge 模板
+# - NAS 自定义内核(例如部分群晖)可能不支持 auto-redirect,改 TUN_AUTO_REDIRECT=false
+services:
+  glash:
+    image: gangz1o/glash:latest
+    container_name: glash
+    restart: unless-stopped
+
+    ports:
+      - '7890:7890' # HTTP 代理
+      - '7891:7891' # SOCKS5 代理
+      - '7892:7892' # 混合代理 (HTTP + SOCKS5)
+      - '9090:9090' # API 控制器 & Dashboard
+
+    volumes:
+      - ./config:/root/.config/mihomo
+
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    environment:
+      - TZ=Asia/Shanghai
+
+      # TUN 模式开关
+      - TUN_ENABLED=true
+      # auto-redirect 在某些 NAS 内核下不兼容,默认 true,如需关闭取消下一行注释
+      # - TUN_AUTO_REDIRECT=false
+
+      # ========== 订阅(可选) ==========
+      # - SUB_URL=https://your-subscription-url.com/config
+      # - SUB_CRON=0 */6 * * *
+
+      # ========== 持久化覆写 ==========
+      - SECRET=change-me-dashboard-secret
+      - ALLOW_LAN=true
+      - HTTP_PORT=7890
+      - SOCKS_PORT=7891
+      - MIXED_PORT=7892
+
+      # ========== 内核选择(可选) ==========
+      # 默认 standard;订阅含 type: smart 时改 KERNEL=smart(需重启容器)
+      # - KERNEL=smart
+
+      # ========== 其它可选覆写 ==========
+      # - IPV6_ENABLED=true
+      # - AUTHENTICATION=user:password
+      # - MODE=global
+      # - DNS_OVERRIDE=true
+
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9090/version']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'

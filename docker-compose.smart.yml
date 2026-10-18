@@ -1,0 +1,64 @@
+# Smart 内核模式:使用 vernesong/mihomo Smart fork,支持 type: smart 策略组、
+# ASN 偏好、可选 LightGBM 自动测速选择。
+#
+# 验证:`docker compose -f docker-compose.smart.yml up -d`
+#
+# 关键点:
+# - 镜像默认同时打包 standard 与 smart(KERNEL 决定启动哪一个)
+# - 此模板默认 KERNEL=smart
+# - 订阅里包含 type: smart 策略组时效果最佳;纯标准订阅也能跑(smart 兼容)
+# - 切换 KERNEL 后必须重启容器(不会自动重启)
+services:
+  glash:
+    image: gangz1o/glash:latest
+    container_name: glash
+    restart: unless-stopped
+
+    ports:
+      - '7890:7890' # HTTP 代理
+      - '7891:7891' # SOCKS5 代理
+      - '7892:7892' # 混合代理 (HTTP + SOCKS5)
+      - '9090:9090' # API 控制器 & Dashboard
+
+    volumes:
+      - ./config:/root/.config/mihomo
+
+    environment:
+      - TZ=Asia/Shanghai
+
+      # 内核选择:smart
+      - KERNEL=smart
+
+      # ========== 订阅(可选) ==========
+      # 留空时走"本地配置模式",需要 ./config/config.yaml 存在
+      # - SUB_URL=https://your-subscription-url.com/config
+      # - SUB_CRON=0 */6 * * *
+      # - SUB_USER_AGENT=clash.meta
+
+      # ========== 持久化覆写 ==========
+      - SECRET=change-me-dashboard-secret
+      - ALLOW_LAN=true
+      - HTTP_PORT=7890
+      - SOCKS_PORT=7891
+      - MIXED_PORT=7892
+
+      # ========== 其它可选覆写 ==========
+      # - IPV6_ENABLED=true
+      # - AUTHENTICATION=user:password
+      # - MODE=global
+      # - TUN_ENABLED=true
+      # - DNS_OVERRIDE=true
+      # - DOWNLOAD_PROXY=http://192.168.1.1:7890
+
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9090/version']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'

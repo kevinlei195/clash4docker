@@ -82,7 +82,7 @@ docker logs -f glash
 
 > 配置目录必须可写。订阅模式不要把 `config.yaml` 单文件挂载为 `:ro`,容器需要保存订阅并写入环境变量覆写项。
 
-完整示例与本地配置模式见 [`docs/install/quickstart-subscription.md`](./docs/install/quickstart-subscription.md)。
+完整示例与本地配置模式见 [`docs/install/quickstart-subscription.md`](./docs/install/quickstart-subscription.md)。其它部署模式(Smart / TUN / host / NAS 网关)与组合用法见 [`docs/install/compose-deployment.md`](./docs/install/compose-deployment.md)。
 
 ## 环境变量速查
 

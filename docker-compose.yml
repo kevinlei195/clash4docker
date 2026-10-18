@@ -58,6 +58,9 @@ services:
       # - DOWNLOAD_PROXY=http://192.168.1.1:7890
       # 订阅请求 User-Agent
       # - SUB_USER_AGENT=clash.meta
+      # 内核选择：standard（默认，MetaCubeX/mihomo） 或 smart（vernesong/mihomo Smart fork）
+      # 切换后需 `docker compose up -d` 重启容器
+      # - KERNEL=smart
 
     # 如果需要 TUN 模式，取消下面的注释
     # cap_add:
@@ -79,25 +82,14 @@ services:
         max-size: '10m'
         max-file: '3'
 
-# ==================== 订阅模式示例 ====================
-# 使用订阅功能时的完整示例配置：
+# ==================== 其它部署模式 ====================
+# 仓库内已提供按场景拆分的 compose 模板，复制或显式 -f 指定即可：
 #
-# services:
-#   glash:
-#     image: gangz1o/glash:latest
-#     container_name: glash
-#     restart: unless-stopped
-#     ports:
-#       - '7890:7890'
-#       - '7891:7891'
-#       - '9090:9090'
-#     volumes:
-#       - ./config:/root/.config/mihomo
-#     environment:
-#       - TZ=Asia/Shanghai
-#       - SUB_URL=https://your-subscription-url.com/config
-#       - SUB_CRON=0 */6 * * *
-#       - SECRET=your-dashboard-password
-#       - HTTP_PORT=7890
-#       - SOCKS_PORT=7891
-#       - MIXED_PORT=7892
+#   docker compose -f docker-compose.subscription.yml up -d
+#   docker compose -f docker-compose.smart.yml up -d
+#   docker compose -f docker-compose.tun.yml up -d
+#   docker compose -f docker-compose.host.yml up -d
+#   docker compose -f docker-compose.nas-bridge.yml up -d
+#
+# 详细对比、组合方式与验证步骤见
+# docs/install/compose-deployment.md。

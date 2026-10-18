@@ -1,0 +1,57 @@
+# Host 网络模式:容器与宿主共享网络命名空间,容器内 7890 等端口直接
+# 监听在宿主网卡上,性能更好(绕过 docker NAT),但与其他服务可能端口冲突。
+#
+# 验证:`docker compose -f docker-compose.host.yml up -d`
+#
+# 关键点:
+# - 不再声明 ports(由 host 网络直接暴露)
+# - container_name 应避免与宿主机已有进程冲突
+# - 跨平台注意:Linux/macOS/Windows 上的 host 语义不同(macOS/Windows
+#   实际是 docker-desktop 的虚拟网桥,仍可走 ports)
+# - Dashboard 默认 0.0.0.0:9090,在 host 模式下任何人可访问 — 务必设置强 SECRET
+# - 不再使用端口映射,SECRET 必须够强(放到强密码或外部 secrets)
+services:
+  glash:
+    image: gangz1o/glash:latest
+    container_name: glash
+    restart: unless-stopped
+
+    network_mode: host
+
+    volumes:
+      - ./config:/root/.config/mihomo
+
+    environment:
+      - TZ=Asia/Shanghai
+
+      # ========== 订阅(可选) ==========
+      # - SUB_URL=https://your-subscription-url.com/config
+      # - SUB_CRON=0 */6 * * *
+
+      # ========== 持久化覆写 ==========
+      # host 模式下 SECRET 务必强密码:任何人可直接访问 0.0.0.0:9090
+      - SECRET=change-me-strong-dashboard-secret
+      - ALLOW_LAN=true
+      - HTTP_PORT=7890
+      - SOCKS_PORT=7891
+      - MIXED_PORT=7892
+
+      # ========== 内核选择(可选) ==========
+      # - KERNEL=smart
+
+      # ========== 其它可选覆写 ==========
+      # - IPV6_ENABLED=true
+      # - AUTHENTICATION=user:password
+      # - MODE=global
+      # - TUN_ENABLED=true           # host 网络下 TUN 行为有差异,需自行评估
+      # - DNS_OVERRIDE=true
+      # - DOWNLOAD_PROXY=http://192.168.1.1:7890
+
+    # host 网络下 TUN 能力通常由容器外的 systemd / nsswitch 接管,容器内部
+    # 不再需要 cap_add / devices;如确需 TUN,见 nas-bridge 模板。
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'

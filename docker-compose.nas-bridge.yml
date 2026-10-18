@@ -1,0 +1,99 @@
+# NAS / 网关模式:把 glash 部署成家庭/办公室网络出口,接管整网流量。
+#
+# 验证:`docker compose -f docker-compose.nas-bridge.yml up -d`
+#
+# 关键点(部署此模式请通读全文,需宿主侧配套):
+# - 使用 host 网络(性能 + 直接监听 7890/9090)
+# - KERNEL=smart(便于整网流量按 ASN 自动选择)
+# - TUN 启用,容器侧 mihomo 通过虚拟网卡接管所有出网流量
+# - 宿主侧需做:启用 IP 转发、配置 iptables NAT、关闭宿主机对外直连
+#   (或在路由器层把所有设备网关指向 NAS IP)
+# - DNS 接管:DNS_OVERRIDE=true 后,容器内 53 端口被 mihomo 占用
+# - 适用于群晖 / 威联通 / 软路由 / 树莓派 等长期在线设备
+# - 首次部署强烈建议先在旁路模式(端口映射 + 不开 TUN)验证
+#   docker-compose.yml / docker-compose.subscription.yml 正常工作,
+#   再切换到本模板
+
+services:
+  glash:
+    image: gangz1o/glash:latest
+    container_name: glash
+    restart: unless-stopped
+
+    # 整网出口走宿主网络栈
+    network_mode: host
+
+    # TUN 接管容器内流量
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    volumes:
+      - ./config:/root/.config/mihomo
+
+    environment:
+      - TZ=Asia/Shanghai
+
+      # ========== 内核 ==========
+      - KERNEL=smart
+
+      # ========== TUN ==========
+      - TUN_ENABLED=true
+      # 群晖/部分 NAS 内核不兼容 auto-redirect,需要时取消下行注释
+      # - TUN_AUTO_REDIRECT=false
+
+      # ========== DNS 接管 ==========
+      - DNS_OVERRIDE=true
+
+      # ========== 订阅 ==========
+      # 必填:NAS 场景下基本都使用机场订阅
+      - SUB_URL=https://your-subscription-url.com/config
+      - SUB_CRON=0 */6 * * *
+      - SUB_USER_AGENT=clash.meta
+
+      # ========== 持久化覆写 ==========
+      - SECRET=change-me-strong-dashboard-secret
+      - ALLOW_LAN=true
+      - HTTP_PORT=7890
+      - SOCKS_PORT=7891
+      - MIXED_PORT=7892
+
+      # ========== 其它可选覆写 ==========
+      # - IPV6_ENABLED=true
+      # - AUTHENTICATION=user:password
+      # - MODE=global
+      # - DOWNLOAD_PROXY=http://192.168.1.1:7890
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+# ==================== 宿主侧配套(参考) ====================
+# 部署完成后,在 NAS 宿主 shell 跑以下(以 Debian 系为例,其它发行版略调):
+#
+# 1. 启用 IP 转发
+#    echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.d/99-glash.conf
+#    sysctl -p /etc/sysctl.d/99-glash.conf
+#
+# 2. 配置 iptables NAT(把内网到外网的流量转给容器 mihomo 监听端口)
+#    LAN_IF=eth0  # NAS 内网网卡(按实际改)
+#    iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+#    iptables -t nat -A PREROUTING -i ${LAN_IF} -p tcp --dport 80 -j REDIRECT --to-ports 7892
+#    iptables -t nat -A PREROUTING -i ${LAN_IF} -p tcp --dport 443 -j REDIRECT --to-ports 7892
+#
+# 3. DNS 接管
+#    iptables -t nat -A PREROUTING -i ${LAN_IF} -p udp --dport 53 -j REDIRECT --to-ports 53
+#    iptables -t nat -A PREROUTING -i ${LAN_IF} -p tcp --dport 53 -j REDIRECT --to-ports 53
+#
+# 4. 路由器层把内网设备的默认网关指向 NAS IP,DNS 指向 NAS IP
+#
+# 5. 持久化 iptables 规则
+#    apt install iptables-persistent
+#    netfilter-persistent save
+#
+# 注意:上述规则为最小化示例,实际部署需要根据网络拓扑(双网口、
+# 桥接、VLAN 等)调整;详细教程见
+# https://wiki.metacubex.one/

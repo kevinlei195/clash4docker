@@ -8,6 +8,7 @@
 
 - [订阅模式快速开始](./install/quickstart-subscription.md) — 订阅 URL + docker compose / docker run
 - [本地配置模式](./install/quickstart-local.md) — 挂载自维护的 `config.yaml`
+- [部署方式索引](./install/compose-deployment.md) — 6 种 compose 模板(默认/订阅/Smart/TUN/host/NAS)与组合用法
 
 ### 日常使用
 

@@ -1,0 +1,70 @@
+# 订阅模式:使用机场订阅 URL,容器启动与定时任务都会拉取最新配置。
+# 验证:`docker compose -f docker-compose.subscription.yml up -d`
+#
+# 关键点:
+# - ./config 目录必须可写(订阅下载、env 覆写、Hook 都会写入此目录)
+# - 必填:SUB_URL,SECRET;推荐:HTTP_PORT/SOCKS_PORT/MIXED_PORT 固定端口
+# - 切换 KERNEL=smart 时需重启容器
+services:
+  glash:
+    image: gangz1o/glash:latest
+    container_name: glash
+    restart: unless-stopped
+
+    ports:
+      - '7890:7890' # HTTP 代理
+      - '7891:7891' # SOCKS5 代理
+      - '7892:7892' # 混合代理 (HTTP + SOCKS5)
+      - '9090:9090' # API 控制器 & Dashboard
+
+    volumes:
+      - ./config:/root/.config/mihomo
+      # 可选:订阅下载后执行的自定义 Hook
+      # - ./hooks.d:/app/hooks.d:ro
+
+    environment:
+      - TZ=Asia/Shanghai
+
+      # ========== 订阅 ==========
+      - SUB_URL=https://your-subscription-url.com/config
+      - SUB_CRON=0 */6 * * *
+      - SUB_USER_AGENT=clash.meta
+
+      # ========== 持久化覆写 ==========
+      - SECRET=change-me-dashboard-secret
+      - ALLOW_LAN=true
+      - HTTP_PORT=7890
+      - SOCKS_PORT=7891
+      - MIXED_PORT=7892
+
+      # ========== 内核选择(可选) ==========
+      # 默认 standard;订阅里出现 type: smart 策略组时改 smart,需重启容器
+      # - KERNEL=smart
+
+      # ========== 其它可选覆写(取消注释启用) ==========
+      # - IPV6_ENABLED=true
+      # - AUTHENTICATION=user:password
+      # - MODE=global
+      # - TUN_ENABLED=true           # 同时取消下方 cap_add / devices 注释
+      # - TUN_AUTO_REDIRECT=false    # NAS 内核不兼容时显式关闭
+      # - DNS_OVERRIDE=true
+      # - DOWNLOAD_PROXY=http://192.168.1.1:7890
+
+    # 启用 TUN 模式时取消下方注释
+    # cap_add:
+    #   - NET_ADMIN
+    # devices:
+    #   - /dev/net/tun:/dev/net/tun
+
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9090/version']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
