@@ -1,13 +1,15 @@
 # 构建指南
 
 > 本项目不发布官方镜像产物。本仓库提供 CI 校验(只构建、不推送)与手动构建(本地或自有 registry)两条路径。本文是一站式对照,具体国内网络方案见 [`build-in-china.md`](./build-in-china.md),PR CI 门禁与文档-only 策略见 [`ci.md`](./ci.md)。
+>
+> 只想构建镜像自用 → 直接看 **[手动构建镜像](./manual-build.md)**(完整的自建指南)。
 
 ## 概览
 
 | 维度 | CI 校验 | 手动构建 |
 | --- | --- | --- |
 | 触发方式 | GitHub Actions / Gitea Actions | `docker buildx build` |
-| 默认产物 | 无(仅验证构建可成功,不产出可分发镜像) | 本地镜像,默认同样为 both |
+| 默认产物 | 无(仅验证构建可成功,不产出可分发镜像) | 本地镜像,默认 Smart 内核 + metacubexd |
 | 主要受众 | 贡献者 — PR 合并门禁 | 所有人 — 自部署 / 自有 registry 分发 |
 | 必备 secret | 无 | 无(推到私有 registry 时需自行配置登录) |
 | 默认缓存 | GitHub Actions 用 GHA cache,Gitea 暂未启用 | 不使用(除非手动指定) |
@@ -80,6 +82,8 @@
 ---
 
 # Part 2 · 手动构建
+
+> 完整的自建指南(变体对照、多架构、推送 registry、验证步骤、FAQ)见 **[`./manual-build.md`](./manual-build.md)**。本节是速查版。
 
 ## 前置条件
 

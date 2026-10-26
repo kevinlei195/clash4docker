@@ -2,7 +2,7 @@
 
 基于 [Mihomo Smart 内核](https://github.com/vernesong/mihomo)([Smart 策略组说明](https://github.com/vernesong/OpenClash/releases/tag/mihomo))、内置 [MetacubexD](https://github.com/MetaCubeX/metacubexd) Dashboard 的多架构 Docker 镜像。
 
-本仓库不发布官方镜像产物。镜像需自行构建(见 [`docs/development/build.md`](./docs/development/build.md)),或推送到你自己的 registry 后使用。
+本仓库不发布官方镜像产物。镜像需自行构建 —— 完整指南见 [`docs/development/manual-build.md`](./docs/development/manual-build.md),或推送到你自己的 registry 后使用。
 
 ## 内核
 
@@ -119,6 +119,7 @@ docker logs -f glash
 | Dashboard 与代理端口使用 | [`docs/usage/`](./docs/usage/) |
 | 环境变量与配置参考 | [`docs/configuration/`](./docs/configuration/) |
 | 运维命令与故障排查 | [`docs/operations/`](./docs/operations/) |
+| 手动构建镜像 | [`docs/development/manual-build.md`](./docs/development/manual-build.md) |
 | 运行时结构与本地开发 | [`docs/development/`](./docs/development/) |
 | 国内构建指南(国内网络) | [`docs/development/build-in-china.md`](./docs/development/build-in-china.md) |
 | PR CI 门禁 | [`docs/development/ci.md`](./docs/development/ci.md) |

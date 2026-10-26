@@ -1,6 +1,8 @@
 # 国内构建指南
 
 > 国内网络环境下构建 Clash for Docker(glash) 的镜像、推送镜像、以及推送到 Gitea 等场景的注意事项与解决方案。
+>
+> 通用构建流程见 [`./manual-build.md`](./manual-build.md);本文只覆盖国内网络特有的问题。
 
 ## 概览
 
