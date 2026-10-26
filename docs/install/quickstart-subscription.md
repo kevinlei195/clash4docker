@@ -11,7 +11,7 @@
 ```yaml
 services:
   glash:
-    image: gangz1o/glash:latest
+    image: my/glash:latest   # 替换为你自己构建/推送的镜像
     container_name: glash
     restart: unless-stopped
     ports:
@@ -30,6 +30,12 @@ services:
       HTTP_PORT: "7890"
       SOCKS_PORT: "7891"
       MIXED_PORT: "7892"
+```
+
+本仓库不发布官方预构建镜像,先构建一个:
+
+```bash
+docker buildx build -t my/glash:latest .
 ```
 
 启动并查看日志:
@@ -59,7 +65,7 @@ docker run -d \
   -e HTTP_PORT=7890 \
   -e SOCKS_PORT=7891 \
   -e MIXED_PORT=7892 \
-  gangz1o/glash:latest
+  my/glash:latest
 ```
 
 ## 下一步

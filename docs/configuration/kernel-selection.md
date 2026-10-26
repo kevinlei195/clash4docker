@@ -1,6 +1,6 @@
 # 内核选择(KERNEL)
 
-镜像 `gangz1o/glash:latest` 同时打包两个 mihomo 内核二进制,运行时通过 `KERNEL` 环境变量选择其中一个:
+默认构建(`FLAVORS=both`)的镜像同时打包两个 mihomo 内核二进制,运行时通过 `KERNEL` 环境变量选择其中一个:
 
 | 取值 | 内核 | 适用场景 |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 ```yaml
 services:
   glash:
-    image: gangz1o/glash:latest
+    image: my/glash:latest   # 替换为你自己构建/推送的镜像
     container_name: glash
     restart: unless-stopped
     environment:

@@ -11,7 +11,7 @@ TUN 需要 Linux TUN 设备和 `NET_ADMIN` 能力:
 ```yaml
 services:
   glash:
-    image: gangz1o/glash:latest
+    image: my/glash:latest   # 替换为你自己构建/推送的镜像
     container_name: glash
     restart: unless-stopped
     cap_add:

@@ -2,12 +2,11 @@
 
 基于 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核、内置 [MetacubexD](https://github.com/MetaCubeX/metacubexd) Dashboard 的多架构 Docker 镜像。
 
-Dockerhub
-https://hub.docker.com/r/gangz1o/glash
+本仓库不发布官方镜像产物。镜像需自行构建(见 [`docs/development/build.md`](./docs/development/build.md)),或推送到你自己的 registry 后使用。
 
 ## 内核选择
 
-单一镜像 `gangz1o/glash:latest` 默认包含两个内核二进制,运行时通过环境变量 `KERNEL` 选择(默认 `standard`):
+单一镜像默认包含两个内核二进制,运行时通过环境变量 `KERNEL` 选择(默认 `standard`):
 
 | `KERNEL` | 内核来源 | 特性 |
 | --- | --- | --- |
@@ -57,7 +56,7 @@ https://hub.docker.com/r/gangz1o/glash
 # docker-compose.yml
 services:
   glash:
-    image: gangz1o/glash:latest
+    image: my/glash:latest   # 替换为你自己构建/推送的镜像
     container_name: glash
     restart: unless-stopped
     ports:
@@ -76,6 +75,9 @@ services:
 ```
 
 ```bash
+# 先构建镜像(本仓库不提供官方预构建镜像)
+docker buildx build -t my/glash:latest .
+
 docker compose up -d
 docker logs -f glash
 ```
@@ -129,7 +131,6 @@ docker logs -f glash
 - [Mihomo](https://github.com/MetaCubeX/mihomo)
 - [MetacubexD](https://github.com/MetaCubeX/metacubexd)
 - [zashboard](https://github.com/Zephyruso/zashboard)
-- [gangz1o/glash](https://hub.docker.com/r/gangz1o/glash)
 
 ## 相关链接
 

@@ -1,8 +1,16 @@
 # 升级与版本固定
 
-## 升级 latest
+## 升级自建镜像
+
+本仓库不发布官方镜像。升级时重新构建并推送你自己的镜像:
 
 ```bash
+docker buildx build --builder glash-builder \
+  --build-arg FLAVORS=both \
+  --platform linux/amd64,linux/arm64,linux/arm/v7 \
+  --tag <your-registry>/<your-namespace>/glash:latest \
+  --push .
+
 docker compose pull
 docker compose up -d --force-recreate
 ```
@@ -12,7 +20,7 @@ docker compose up -d --force-recreate
 生产环境建议固定镜像标签,并在验证后主动升级:
 
 ```yaml
-image: gangz1o/glash:x.y.z
+image: <your-registry>/<your-namespace>/glash:x.y.z
 ```
 
 ## 当前源码构建参数
@@ -22,8 +30,8 @@ image: gangz1o/glash:x.y.z
 | 组件 | 当前版本 |
 | --- | --- |
 | Alpine | 3.19 |
-| Mihomo | v1.19.30 |
-| MetacubexD | v1.273.0 |
+| Mihomo | v1.19.31 |
+| MetacubexD | v1.273.1 |
 
 > 镜像内页面显示的版本取决于所使用的镜像标签,不一定与 `master` 分支当前值相同。
 

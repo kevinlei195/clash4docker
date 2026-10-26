@@ -15,9 +15,9 @@ workflow 始终触发，不使用会让 required check 永久 pending 的路径�
 
 ## Pull Request 安全边界
 
-Pull Request workflow 明确使用只读仓库权限，checkout 不保留写入凭据，不读取 Docker Hub 或生产环境 secrets，也不执行镜像推送。来自 fork 的代码按同一边界验证；GitHub 可能要求维护者先批准运行，但批准不应授予发布权限。
+Pull Request workflow 明确使用只读仓库权限，checkout 不保留写入凭据，不读取 registry 或生产环境 secrets，也不执行镜像推送。来自 fork 的代码按同一边界验证；GitHub 可能要求维护者先批准运行，但批准不应授予发布权限。
 
-发布仍只由 `.github/workflows/docker-build.yml` 负责。核对发布边界时，应确认该文件是唯一包含 `docker/login-action`、`DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` 和 `push: true` 的 workflow，并继续发布三种目标架构。CI workflow 必须保持无 Docker Hub 登录和无推送步骤。
+仓库不包含任何镜像发布路径：没有 Release 触发的构建推送 workflow，也没有 `docker/login-action`、registry 凭据或 `push: true` 步骤。CI workflow 必须保持无 registry 登录和无推送步骤。镜像分发由使用者自行完成，见 [`./build.md`](./build.md) 的"分发到你自己的 registry"。
 
 ## 配置 master 合并门禁
 

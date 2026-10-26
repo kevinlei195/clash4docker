@@ -1,31 +1,32 @@
 # 构建指南
 
-> 本项目有两种构建姿势:CI 构建(把镜像推到 Docker Hub)与手动构建(本地构建用于验证或自部署)。本文是一站式对照,具体国内网络方案见 [`build-in-china.md`](./build-in-china.md),PR CI 门禁与文档-only 策略见 [`ci.md`](./ci.md)。
+> 本项目不发布官方镜像产物。本仓库提供 CI 校验(只构建、不推送)与手动构建(本地或自有 registry)两条路径。本文是一站式对照,具体国内网络方案见 [`build-in-china.md`](./build-in-china.md),PR CI 门禁与文档-only 策略见 [`ci.md`](./ci.md)。
 
 ## 概览
 
-| 维度 | CI 构建 | 手动构建 |
+| 维度 | CI 校验 | 手动构建 |
 | --- | --- | --- |
 | 触发方式 | GitHub Actions / Gitea Actions | `docker buildx build` |
-| 默认产物 | 推到 `docker.io/gangz1o/glash`,含两个内核(`FLAVORS=both`) | 本地镜像,默认同样为 both |
-| 主要受众 | 维护者 — release 发版 | 贡献者 — 本地验证 / 自部署 |
-| 必备 secret | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` | 无 |
+| 默认产物 | 无(仅验证构建可成功,不产出可分发镜像) | 本地镜像,默认同样为 both |
+| 主要受众 | 贡献者 — PR 合并门禁 | 所有人 — 自部署 / 自有 registry 分发 |
+| 必备 secret | 无 | 无(推到私有 registry 时需自行配置登录) |
 | 默认缓存 | GitHub Actions 用 GHA cache,Gitea 暂未启用 | 不使用(除非手动指定) |
 
-两个姿势共用同一个 `Dockerfile`,运行时内核选择通过环境变量 `KERNEL=standard|smart`,构建期参数通过 `FLAVORS=standard|smart|both` 与 `UI=metacubexd|zashboard`。详见 [`../configuration/build-flavors.md`](../configuration/build-flavors.md) 与 [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md)。
+两条路径共用同一个 `Dockerfile`,运行时内核选择通过环境变量 `KERNEL=standard|smart`,构建期参数通过 `FLAVORS=standard|smart|both` 与 `UI=metacubexd|zashboard`。详见 [`../configuration/build-flavors.md`](../configuration/build-flavors.md) 与 [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md)。
+
+> **仓库不包含任何镜像发布路径**:没有 Release 触发的构建推送 workflow,也没有 registry 登录凭据。需要镜像产物时,用下面的手动构建流程自行构建并推送到你控制的 registry。
 
 ---
 
-# Part 1 · CI 构建
+# Part 1 · CI 校验(只构建,不发布)
 
 ## GitHub Actions
 
-工作流分两类文件:
+仓库只有一个 workflow:
 
 | 文件 | 触发 | 用途 |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | PR / `master` 推送 | PR 校验(changes/shell/smoke/build/ci-gate 五段) |
-| `.github/workflows/docker-build.yml` | Release `published` | 构建并推送 `gangz1o/glash:latest` 与版本 tag |
 
 ### PR CI
 
@@ -34,66 +35,36 @@
 1. **changes** — 用 `dorny/paths-filter` 判定本次变更是否涉及运行时(非纯文档),非运行时变更可跳过后续耗时任务
 2. **shell** — `bash -n` 语法检查 + `test_mode.sh` / `test_reload.sh` / `test_modules.sh` + Alpine BusyBox `awk` 环境回归
 3. **smoke** — `docker buildx` 构建 `glash-ci:amd64`(`FLAVORS=both`)与 `glash-ci-standard:amd64`(`FLAVORS=standard`),分别驱动 `test_container.sh` 与 `test_kernel_absence.sh`
-4. **build** — 三平台(`linux/amd64`、`linux/arm64`、`linux/arm/v7`) × 两种 `FLAVORS`(`both`、`standard`)的 `outputs: type=cacheonly` 矩阵,验证构建可成功而不发布
+4. **build** — 三平台(`linux/amd64`、`linux/arm64`、`linux/arm/v7`) × 两种 `FLAVORS`(`both`、`standard`)的 `outputs: type=cacheonly` 矩阵,验证构建可成功
 5. **ci-gate** — 汇总前四段结果,作为 PR 合并门禁
 
 矩阵维度变化:本次集成后从原本的 `project: [clash4docker, clash4docker-smart]` 改为 `flavors: [both, standard]`。
 
-### Release 构建
+### 发布边界
 
-发版流程:
+该 workflow 使用只读仓库权限,不包含 `docker/login-action`、registry 凭据或 `push: true` 步骤。它只用于验证,不产出可分发镜像。
 
-```bash
-# 1. 打 tag 推送
-git tag v1.3.0
-git push origin v1.3.0
-
-# 2. 在 GitHub 上 Release 该 tag (类型选择 "Published" 才会触发)
-```
-
-`.github/workflows/docker-build.yml` 行为:
-
-- `ref: ${{ github.event.release.tag_name }}` 检出该 tag 对应的代码
-- `FLAVORS=both` 构建三个架构
-- 推送两个 tag:`docker.io/gangz1o/glash:latest` + `docker.io/gangz1o/glash:<release-tag>`
-- 打上 `org.opencontainers.image.version` / `source` / `flavors` 等 OCI 标签
-- 启用 `cache-from: type=gha` + `cache-to: type=gha,mode=max` 跨 run 复用
-
-### 配置 secrets
-
-在 GitHub 仓库 **Settings → Secrets and variables → Actions** 配置:
-
-| Secret | 说明 |
-| --- | --- |
-| `DOCKERHUB_USERNAME` | Docker Hub 用户名 |
-| `DOCKERHUB_TOKEN` | Docker Hub 访问令牌(不是密码) |
-
-secrets 缺失会导致 release 推送失败,但 PR CI 不会受影响。
+镜像分发由使用者自行完成,见 [Part 2 · 手动构建](#part-2--手动构建)。
 
 ## Gitea Actions
 
-`.gitea/workflows/{ci,docker-build}.yml` 是 GitHub 工作流的等价镜像,默认行为一致:
+`.gitea/workflows/ci.yml` 是 GitHub 工作流的等价镜像,默认行为一致:
 
-- 同样的 PR 矩阵、smoke 构建、release push
+- 同样的 PR 矩阵与 smoke 构建
 - 默认 `FLAVORS=both`
-- 同样推到 `docker.io/gangz1o/glash`
+- 同样只构建、不推送
 
 ### 与 GitHub 的差异
 
 | 维度 | GitHub Actions | Gitea Actions |
 | --- | --- | --- |
 | Action 来源 | `docker/build-push-action@v5` 等官方市场 | 同 —— 协议兼容,多数通用 action 可直接复用 |
-| 缓存 | `cache-from: type=gha` + `cache-to: type=gha,mode=max` | 暂未启用。Gitea 实例若提供 registry,可在 `.gitea/workflows/docker-build.yml` 加 `cache-from: type=registry,ref=<your-registry>/cache` |
+| 缓存 | `cache-from: type=gha` + `cache-to: type=gha,mode=max` | 暂未启用。Gitea 实例若提供 registry,可在 `.gitea/workflows/ci.yml` 加 `cache-from: type=registry,ref=<your-registry>/cache` |
 | 上下文变量 | `github.server_url`、`github.repository` | `gitea.server_url`、`gitea.repository` —— label 中已替换 |
-| Secrets 命名 | `DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`(一致) | 同名,需在 Gitea 仓库的 secrets 里配置 |
-
-### 配置 secrets
-
-Gitea 仓库 **Settings → Secrets** 添加 `DOCKERHUB_USERNAME` 与 `DOCKERHUB_TOKEN`,命名与取值与 GitHub 一致。
 
 ## 升级清单(维护者)
 
-下面变更会触发 CI,但建议在 release 流程里一并处理:
+下面变更会触发 CI,建议在合并前一并处理:
 
 | 升级项 | 涉及的文件/参数 |
 | --- | --- |
@@ -191,9 +162,42 @@ services:
         FLAVORS: standard
 ```
 
-### 3.5 zashboard 镜像(自建,官方不发布)
+### 3.2 分发到你自己的 registry
 
-官方 `gangz1o/glash:latest` 只打包 metacubexd。需要 zashboard 走自建:
+本仓库不发布官方镜像。若需要多台机器共用同一份镜像,自行构建后推送到你控制的 registry:
+
+```bash
+# 登录(按你的 registry 替换)
+docker login registry.example.com
+
+# 单架构推送
+docker buildx build --builder glash-builder \
+  --build-arg FLAVORS=both \
+  --platform linux/amd64 \
+  --tag registry.example.com/myaccount/glash:latest \
+  --push .
+
+# 多架构推送(需要 QEMU)
+docker buildx build --builder glash-builder \
+  --build-arg FLAVORS=both \
+  --platform linux/amd64,linux/arm64,linux/arm/v7 \
+  --tag registry.example.com/myaccount/glash:latest \
+  --push .
+```
+
+推送后把 compose 模板里的 `image:` 改成你的镜像地址即可,其余配置不动:
+
+```yaml
+services:
+  glash:
+    image: registry.example.com/myaccount/glash:latest
+```
+
+国内网络环境下的 registry 选择见 [`build-in-china.md`](./build-in-china.md) 的"镜像推送"段。
+
+### 3.5 zashboard 镜像(自建)
+
+Dashboard 由 `UI` build-arg 决定。默认打包 metacubexd;需要 zashboard 时显式指定:
 
 ```bash
 docker buildx build --builder glash-builder \
@@ -406,7 +410,7 @@ docker exec <容器> readlink -f /app/mihomo
 ./scripts/build-interactive.sh --advanced            # 高级模式:展开全部 7 个 build-arg
 ./scripts/build-interactive.sh --dry-run             # 只打印命令,不真构建
 ./scripts/build-interactive.sh --flavors smart --ui zashboard --tag my:zas
-./scripts/build-interactive.sh --push --user gangz1o  # 推送到 Docker Hub
+./scripts/build-interactive.sh --push --user myaccount      # 推送到自己的 registry
 ./scripts/build-interactive.sh --platform linux/arm64,linux/amd64
 ./scripts/build-interactive.sh --help               # 全部参数说明
 ```

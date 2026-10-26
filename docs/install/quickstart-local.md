@@ -9,7 +9,7 @@
 ```yaml
 services:
   glash:
-    image: gangz1o/glash:latest
+    image: my/glash:latest   # 替换为你自己构建/推送的镜像
     container_name: glash
     restart: unless-stopped
     ports:
@@ -21,6 +21,12 @@ services:
       - ./config.yaml:/root/.config/mihomo/config.yaml:ro
     environment:
       TZ: Asia/Shanghai
+```
+
+本仓库不发布官方预构建镜像,先构建一个:
+
+```bash
+docker buildx build -t my/glash:latest .
 ```
 
 ## 最小配置示例

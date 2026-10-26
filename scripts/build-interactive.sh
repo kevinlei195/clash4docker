@@ -308,8 +308,7 @@ ensure_builder() {
 print_banner() {
     printf '\n%b%s%b\n' "${C_BOLD}" "glash 交互式镜像构建脚本" "${C_RESET}"
     printf '镜像源: Dockerfile (本仓库)\n'
-    printf '官方发布: gangz1o/glash (CI 自动构建)\n'
-    printf '本脚本用于本地自构建,适合自定义 FLAVORS / UI / 内核版本\n\n'
+    printf '本仓库不发布官方镜像;本脚本用于本地自构建,适合自定义 FLAVORS / UI / 内核版本\n\n'
 }
 
 # 简单模式

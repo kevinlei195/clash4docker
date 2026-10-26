@@ -8,7 +8,7 @@
 
 1. **GitHub 资源下载** — `Dockerfile` 在 builder 阶段通过 `docker/build-helpers/download-*.sh` 从 `github.com` 下载 Mihomo 内核、MetacubexD Dashboard 和 GeoData
 2. **Docker 基础镜像拉取** — `alpine:3.19` 默认从 `docker.io` 拉取
-3. **镜像推送与 Git 推送** — Docker Hub 推送、Gitea SSH 等连通性
+3. **镜像推送与 Git 推送** — 自建镜像推到 registry、Gitea SSH 等连通性
 
 本文提供多种方案,**不修改源码**,全部通过环境变量、配置或临时文件解决。建议先跳到下一节"快速选择",根据自身场景选择方案。
 
@@ -239,7 +239,9 @@ GitHub 托管的 runner **位于境外**,通常不需要任何代理,GitHub、Do
 - AMD64 容器烟雾测试
 - 多架构构建验证(`linux/amd64`、`linux/arm64`、`linux/arm/v7`)
 
-`.github/workflows/docker-build.yml` 仅在发布 Release 时构建并推送 Docker Hub,使用 `secrets.DOCKERHUB_USERNAME` / `secrets.DOCKERHUB_TOKEN`。
+`.github/workflows/ci.yml` 仅在 Pull Request 上运行,只构建不推送,不需要任何 registry secrets。
+
+仓库不发布官方镜像产物;需要镜像时用 [`./build.md`](./build.md) 的手动构建流程自行构建并推送到你控制的 registry。
 
 ### Fork 仓库
 
@@ -254,15 +256,27 @@ Fork 提交的 CI workflow 按只读权限运行,无仓库 secrets。如需让 f
 
 ## 镜像推送
 
-### Docker Hub 推送(Dockerfile 发布路径)
+本仓库不发布官方镜像。镜像产物需要自行构建后推送到你控制的 registry。
 
-`.github/workflows/docker-build.yml` 默认推送到 `docker.io/gangz1o/glash`。GitHub Actions runner 在境外,**CI 发布路径不受国内网络限制**。
+### 推送到 Docker Hub
+
+若你需要一个可拉取的镜像地址,可以推到自己的 Docker Hub 账号:
+
+```bash
+docker login
+
+docker buildx build --builder glash-builder \
+  --build-arg FLAVORS=both \
+  --platform linux/amd64,linux/arm64,linux/arm/v7 \
+  --tag <your-account>/glash:latest \
+  --push .
+```
 
 本地手工 `docker push` 到 Docker Hub 受限场景:
 
 ```bash
 # 登录到国内镜像 registry(替换为你账号的镜像源)
-docker tag gangz1o/glash:latest docker.m.daocloud.io/<your-namespace>/glash:latest
+docker tag <your-account>/glash:latest docker.m.daocloud.io/<your-namespace>/glash:latest
 docker push docker.m.daocloud.io/<your-namespace>/glash:latest
 ```
 
@@ -420,4 +434,3 @@ docker buildx create --use --driver remote
 - 运行时结构:[`./runtime-structure.md`](./runtime-structure.md)
 - Dockerfile:[`../../Dockerfile`](../../Dockerfile)
 - CI workflow:[`../../.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
-- 发布 workflow:[`../../.github/workflows/docker-build.yml`](../../.github/workflows/docker-build.yml)

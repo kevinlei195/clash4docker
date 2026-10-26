@@ -88,7 +88,7 @@ curl -sH "Authorization: Bearer $SECRET" http://127.0.0.1:9090/group/weights
 ```
 
 **关键点**:
-- 官方 `gangz1o/glash:latest` 镜像同时打包 standard 与 smart,`KERNEL=smart` 决定用哪个
+- 默认构建(`FLAVORS=both`)的镜像同时打包 standard 与 smart,`KERNEL=smart` 决定用哪个
 - 纯标准订阅也能用 Smart 内核跑(它向后兼容 `type: select` / `url-test` / `fallback`)
 - 反之 Smart-only 配置在 standard 内核下会启动失败 — 见 [FAQ](#71-smart-策略组启动失败)
 
@@ -203,19 +203,19 @@ docker compose -f docker-compose.second.yml up -d       # 第二实例(KERNEL=sm
 | 添加 `KERNEL=smart` | 在任一模板加 `- KERNEL=smart`,重启 |
 | 启用 TUN | 改用 `docker-compose.tun.yml`,按需加 `KERNEL=smart` |
 
-### 5.2 从 `gangz1o/glash-smart` 迁移
+### 5.2 从单内核镜像迁移到双内核
 
-`glash-smart` 镜像已停止更新。对应迁移:
+早期镜像(如已停更的 `gangz1o/glash-smart`)只打包单一内核。当前默认构建(`FLAVORS=both`)同时打包 standard 与 smart,运行时由 `KERNEL=smart` 选择:
 
 | 旧 | 新 |
 | --- | --- |
-| `image: gangz1o/glash-smart:latest` | `image: gangz1o/glash:latest` |
-| 自带 Smart 内核 | 官方镜像已双打包,运行时由 `KERNEL=smart` 选择 |
+| `image: <旧镜像>:latest` | `image: <你的镜像>:latest`(自建产物) |
+| 自带单一内核 | 双内核打包,运行时由 `KERNEL=smart` 选择 |
 | (无) | `docker-compose.smart.yml` 模板可直接用 |
 
 ### 5.3 切换 Dashboard(zashboard)
 
-官方 `gangz1o/glash:latest` 默认打包 metacubexd Dashboard。**官方不发布 zashboard 镜像**;需要 zashboard 走自建:
+Dashboard 由构建参数 `UI` 决定。默认打包 metacubexd;需要 zashboard 时显式指定:
 
 ```bash
 docker buildx build \

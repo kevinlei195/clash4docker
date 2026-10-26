@@ -13,7 +13,7 @@
 ## 用法
 
 ```bash
-# 官方默认(both)
+# 默认(both)
 docker build -t my/glash:both --build-arg FLAVORS=both .
 
 # 仅 standard(适合只用标准内核的部署)
@@ -53,7 +53,7 @@ services:
 
 | 取值 | 包含 | 体积影响 | 备注 |
 | --- | --- | --- | --- |
-| `metacubexd` | `MetaCubeX/metacubexd`(`compressed-dist.tgz`) | 默认 | 官方镜像默认;与历史版本完全一致 |
+| `metacubexd` | `MetaCubeX/metacubexd`(`compressed-dist.tgz`) | 默认 | 默认 Dashboard |
 | `zashboard` | `Zephyruso/zashboard`(`dist.zip`,含字体) | +5-7 MB | 自动检测后端;支持 PWA |
 
 ### 用法
