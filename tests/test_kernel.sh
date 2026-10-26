@@ -15,8 +15,13 @@ fi
 
 image="$1"
 
-CONFIG_DIR="/tmp/glash-kernel-test/config"
-rm -rf "/tmp/glash-kernel-test"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# 测试目录必须建在仓库内:CI runner 以嵌套容器(dind)方式运行,
+# daemon 与 job 容器只共享仓库工作区,/tmp 并不共享 ——
+# 用 /tmp 会导致 bind mount 到 daemon 侧的空目录,容器内看不到 config.yaml。
+TEST_DIR="$(mktemp -d "${REPO_DIR}/.clash4docker-kernel-ci.XXXXXX")"
+CONFIG_DIR="${TEST_DIR}/config"
 mkdir -p "${CONFIG_DIR}"
 
 # minimal 中性配置:不依赖真实节点即可启动
@@ -46,7 +51,7 @@ cleanup() {
     if [ -n "${cid}" ]; then
         docker rm -f "${cid}" >/dev/null 2>&1 || true
     fi
-    rm -rf "/tmp/glash-kernel-test"
+    rm -rf "${TEST_DIR}"
 }
 trap cleanup EXIT
 
