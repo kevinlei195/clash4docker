@@ -16,6 +16,7 @@ fi
 image="$1"
 
 CONFIG_DIR="/tmp/glash-kernel-test/config"
+rm -rf "/tmp/glash-kernel-test"
 mkdir -p "${CONFIG_DIR}"
 
 # minimal 中性配置:不依赖真实节点即可启动
@@ -38,47 +39,68 @@ proxy-groups:
 rules: []
 EOF
 
+SECRET_VALUE="ci-test"
+cid=""
+
 cleanup() {
-    docker rm -f "${cid:-}" >/dev/null 2>&1 || true
+    if [ -n "${cid}" ]; then
+        docker rm -f "${cid}" >/dev/null 2>&1 || true
+    fi
+    rm -rf "/tmp/glash-kernel-test"
 }
 trap cleanup EXIT
 
-# 启动容器并等待 controller listen — 在容器内 curl,所以不需要 -p
+# 启动容器并等待 controller 就绪。
+#
+# 注意:这里刻意不用 --rm —— 容器若启动失败,需要保留它才能读取日志定位问题。
+# controller 需要 Authorization 头才能响应 /version,否则一律 401。
 wait_for_controller() {
     local env_args=("$@")
     local i
-    cid="$(docker run -d --rm \
+    cid="$(docker run -d \
         -v "${CONFIG_DIR}:/root/.config/mihomo" \
-        -e SECRET=ci-test \
+        -e "SECRET=${SECRET_VALUE}" \
         "${env_args[@]}" \
         "${image}")"
+
     for i in $(seq 1 30); do
-        sleep 1
-        if docker exec "${cid}" sh -c 'command -v wget >/dev/null || true; wget -q -O- http://127.0.0.1:9080/version >/dev/null 2>&1' \
-            || docker exec "${cid}" sh -c '[ -x /app/mihomo ]'; then
+        # 容器已经退出 -> 立刻失败,不要继续空等
+        if ! docker inspect --format '{{.State.Running}}' "${cid}" 2>/dev/null | grep -q true; then
+            echo "FAIL: 容器启动后立即退出(exit=$(docker inspect --format '{{.State.ExitCode}}' "${cid}" 2>/dev/null || echo '?'))" >&2
+            dump_container_logs
+            return 1
+        fi
+
+        # controller 带 Authorization 头才返回 200
+        if docker exec "${cid}" wget -q -O- \
+            --header="Authorization: Bearer ${SECRET_VALUE}" \
+            http://127.0.0.1:9080/version 2>/dev/null | grep -q '"version"'; then
             return 0
         fi
+        sleep 1
     done
-    # wget 不可用,直接检查进程在听
-    if docker exec "${cid}" sh -c "ss -tlnp 2>/dev/null | grep -q 9080" \
-        || docker exec "${cid}" sh -c "netstat -tlnp 2>/dev/null | grep -q 9080" \
-        || docker exec "${cid}" sh -c "/app/mihomo -h >/dev/null 2>&1 && true"; then
-        return 0
-    fi
-    echo "FAIL: container did not become ready in time" >&2
-    docker logs "${cid}" >&2 || true
+
+    echo "FAIL: controller 在 30 秒内未就绪" >&2
+    dump_container_logs
     return 1
 }
 
+dump_container_logs() {
+    echo "----- container logs -----" >&2
+    docker logs "${cid}" 2>&1 | tail -40 >&2 || true
+    echo "-------------------------" >&2
+}
+
 stop_container() {
-    docker rm -f "${cid}" >/dev/null 2>&1 || true
-    cid=""
+    if [ -n "${cid}" ]; then
+        docker rm -f "${cid}" >/dev/null 2>&1 || true
+        cid=""
+    fi
 }
 
 # 1. /app/mihomo 必须是可执行的实体文件(不是指向 /opt/mihomo/* 的软链)
 target="$(docker run --rm --entrypoint sh "${image}" -c 'readlink -f /app/mihomo; ls -ld /app/mihomo' || true)"
 resolved="$(printf '%s\n' "${target}" | head -n 1)"
-linkinfo="$(printf '%s\n' "${target}" | sed -n '2p')"
 
 if [ "${resolved}" != "/app/mihomo" ]; then
     echo "FAIL: /app/mihomo 应解析到自身,实际为 ${resolved}" >&2
@@ -95,31 +117,28 @@ if ! printf '%s\n' "${version}" | grep -qi 'alpha-smart'; then
 fi
 echo "OK 内核版本含 alpha-smart: $(printf '%s\n' "${version}" | head -n 1)"
 
-# 3. 默认启动即使用 Smart 内核
+# 3. 默认启动即使用 Smart 内核 —— 用 controller 回报的版本确认
 wait_for_controller || exit 1
-assert_kernel_symlink() {
-    local actual
-    actual="$(docker exec "${cid}" readlink -f /app/mihomo || true)"
-    if [ "${actual}" != "/app/mihomo" ]; then
-        echo "FAIL: 期望 /app/mihomo,实际为 '${actual}'" >&2
-        docker logs "${cid}" >&2 || true
-        return 1
-    fi
-}
-assert_kernel_symlink
-echo "OK 默认启动解析到 Smart 内核"
+reported="$(docker exec "${cid}" wget -q -O- \
+    --header="Authorization: Bearer ${SECRET_VALUE}" \
+    http://127.0.0.1:9080/version 2>/dev/null || true)"
+if ! printf '%s\n' "${reported}" | grep -qi 'alpha-smart'; then
+    echo "FAIL: controller 回报的版本不是 Smart:${reported}" >&2
+    dump_container_logs
+    exit 1
+fi
+echo "OK 默认启动使用 Smart 内核(controller 回报 ${reported})"
 stop_container
 
 # 4. 显式 KERNEL=smart 仍然可用(向后兼容)
 wait_for_controller -e KERNEL=smart || exit 1
-assert_kernel_symlink
 echo "OK KERNEL=smart 正常启动"
 stop_container
 
 # 5. KERNEL=standard 必须被拒绝(镜像只包含 smart)
 output="$(docker run --rm \
     -v "${CONFIG_DIR}:/root/.config/mihomo" \
-    -e SECRET=ci-test -e KERNEL=standard "${image}" 2>&1 || true)"
+    -e "SECRET=${SECRET_VALUE}" -e KERNEL=standard "${image}" 2>&1 || true)"
 if printf '%s\n' "${output}" | grep -q "只包含 smart"; then
     echo "OK KERNEL=standard 被明确拒绝"
 else

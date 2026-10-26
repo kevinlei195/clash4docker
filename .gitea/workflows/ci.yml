@@ -66,8 +66,7 @@ jobs:
       - name: Run module regression tests
         run: bash tests/test_modules.sh
 
-      - name: Run kernel selection tests
-        run: bash tests/test_kernel.sh
+      # 注:test_kernel.sh 需要已构建的镜像与 Docker,在 smoke job 中运行
 
       - name: Run build interactive script tests
         run: bash tests/test_build_interactive.sh
