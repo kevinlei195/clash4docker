@@ -128,8 +128,6 @@ validate_config_with_mihomo() {
     local file="$1"
 
     [ -x "${MIHOMO_BIN}" ] || return 0
-    # 在调用二进制前,先把链接切到 KERNEL 选定的内核,避免 standard 校验带 type: smart 的配置。
-    resolve_mihomo_binary || return 1
     if ! SAFE_PATHS="${SAFE_PATHS:+${SAFE_PATHS}:}${UI_DIR}" \
         "${MIHOMO_BIN}" -t -d "${CONFIG_DIR}" -f "${file}"; then
         log_error "❌ Mihomo 拒绝该配置"

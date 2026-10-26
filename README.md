@@ -1,21 +1,28 @@
 # Clash for Docker(glash)
 
-基于 [Mihomo](https://github.com/MetaCubeX/mihomo) 内核、内置 [MetacubexD](https://github.com/MetaCubeX/metacubexd) Dashboard 的多架构 Docker 镜像。
+基于 [Mihomo Smart 内核](https://github.com/vernesong/mihomo)([Smart 策略组说明](https://github.com/vernesong/OpenClash/releases/tag/mihomo))、内置 [MetacubexD](https://github.com/MetaCubeX/metacubexd) Dashboard 的多架构 Docker 镜像。
 
-本仓库不发布官方镜像产物。镜像需自行构建(见 [`docs/development/build.md`](./docs/development/build.md)),或推送到你自己的 registry 后使用。
+本仓库不发布官方镜像产物。镜像需自行构建 —— 完整指南见 [`docs/development/manual-build.md`](./docs/development/manual-build.md),或推送到你自己的 registry 后使用。
 
-## 内核选择
+## 内核
 
-单一镜像默认包含两个内核二进制,运行时通过环境变量 `KERNEL` 选择(默认 `standard`):
+镜像只包含 **Smart 内核** — [vernesong/mihomo](https://github.com/vernesong/mihomo) 的 Smart fork。相比上游 `MetaCubeX/mihomo`,它额外提供:
 
-| `KERNEL` | 内核来源 | 特性 |
-| --- | --- | --- |
-| `standard`(默认) | `MetaCubeX/mihomo` | Mihomo 标准版 |
-| `smart` | `vernesong/mihomo`(Smart fork) | `type: smart` 策略组、ASN 偏好、可选 LightGBM |
+- `type: smart` 策略组(按历史表现自动择优)
+- ASN 偏好(`prefer-asn`)
+- 可选 LightGBM 模型预测权重(`uselightgbm`)
 
-切换时不会自动重启容器,请显式 `docker compose up -d` 重启。Smart 内核的差异与用法见 [`docs/configuration/kernel-selection.md`](./docs/configuration/kernel-selection.md)。
+Smart fork 基于上游 Alpha 分支开发,标准内核语法向后兼容,普通订阅可直接运行。
 
-如需缩减镜像体积,可自建时传入 `--build-arg FLAVORS=standard` 或 `=smart`,只打包单内核。详见 [`docs/configuration/build-flavors.md`](./docs/configuration/build-flavors.md)。
+上游的 `Prerelease-Alpha` 是滚动 tag,资产名内嵌的 SHA 会随上游提交变化。构建时默认自动解析最新资产,也可显式固定:
+
+```bash
+docker build -t my/glash:latest --build-arg MIHOMO_SHORT_SHA_SMART=4624551 .
+```
+
+内核来源、版本解析与自检见 [`docs/configuration/kernel-selection.md`](./docs/configuration/kernel-selection.md)。
+
+Dashboard 可在构建期切换(metacubexd / zashboard),见 [`docs/configuration/build-flavors.md`](./docs/configuration/build-flavors.md)。
 
 项目同时支持远程订阅和本地配置。订阅下载后会先在候选文件中完成环境变量覆写、自定义 Hook 和 Mihomo 原生校验;全部成功才替换当前配置。定时更新使用 Controller 热加载,失败时保留或恢复旧配置,不会为了更新订阅主动重启容器。
 
@@ -23,7 +30,7 @@
 
 ## 功能
 
-- Mihomo 与 MetacubexD 已打包进镜像(自建可切到 zashboard,见 `docs/configuration/build-flavors.md`)
+- Smart 内核与 MetacubexD 已打包进镜像(自建可切到 zashboard,见 `docs/configuration/build-flavors.md`)
 - 支持 `linux/amd64`、`linux/arm64`、`linux/arm/v7`
 - 支持订阅首次下载、定时更新和手动更新
 - 订阅更新默认通过当前 Mihomo 本地代理完成
@@ -100,7 +107,7 @@ docker logs -f glash
 | `MODE` | 空 | 固定 Mihomo 运行模式:`rule` / `global` / `direct` |
 | `HTTP_PORT` / `SOCKS_PORT` / `MIXED_PORT` | 空 | 固定端口,避免订阅刷新覆盖 |
 | `TUN_ENABLED` | 空 | `true` 时持久开启 TUN |
-| `KERNEL` | `standard` | 选择 mihomo 内核 (`standard`/`smart`);切换后请 `docker compose up -d` 重启容器 |
+| `KERNEL` | `smart` | 内核选择;镜像只包含 Smart 内核,设置其它值会启动报错 |
 
 未列出的可选覆写项会保留订阅或本地配置中的原值。
 
@@ -112,6 +119,7 @@ docker logs -f glash
 | Dashboard 与代理端口使用 | [`docs/usage/`](./docs/usage/) |
 | 环境变量与配置参考 | [`docs/configuration/`](./docs/configuration/) |
 | 运维命令与故障排查 | [`docs/operations/`](./docs/operations/) |
+| 手动构建镜像 | [`docs/development/manual-build.md`](./docs/development/manual-build.md) |
 | 运行时结构与本地开发 | [`docs/development/`](./docs/development/) |
 | 国内构建指南(国内网络) | [`docs/development/build-in-china.md`](./docs/development/build-in-china.md) |
 | PR CI 门禁 | [`docs/development/ci.md`](./docs/development/ci.md) |

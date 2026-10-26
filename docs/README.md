@@ -19,8 +19,8 @@
 
 - [环境变量完整参考](./configuration/environment-variables.md) — 运行环境、订阅、持久覆写、端口映射
 - [订阅更新机制](./configuration/subscription-update.md) — 启动流程、定时更新、手动更新
-- [内核选择](./configuration/kernel-selection.md) — `KERNEL=standard|smart` 运行时切换
-- [构建变体](./configuration/build-flavors.md) — `FLAVORS` 与 `UI` 构建参数,自定义打包哪些内核与 Dashboard
+- [内核说明](./configuration/kernel-selection.md) — Smart 内核来源、版本解析与自检
+- [Dashboard 选择](./configuration/build-flavors.md) — `UI` 构建参数,自定义打包哪个 Dashboard
 - [TUN 模式](./configuration/tun-mode.md) — TUN 启用与网络边界
 - [订阅后自定义 Hook](./configuration/hooks.md) — 在订阅配置上执行自定义脚本
 
@@ -35,6 +35,7 @@
 - [运行时结构](./development/runtime-structure.md) — `start.sh` / `lib/glash/` 模块划分
 - [本地开发与验证](./development/local-development.md) — Shell 检查、回归测试、本地构建
 - [构建指南(总)](./development/build.md) — CI 校验(GitHub + Gitea)与手动构建一站式对照
+- [手动构建镜像](./development/manual-build.md) — 自建镜像完整指南:变体、多架构、推送 registry、验证
 - [国内构建指南](./development/build-in-china.md) — 国内网络环境下的镜像构建、自建镜像推送与 Git 推送方案
 - [CI 检查](./development/ci.md) — Pull Request CI 层级、文档-only 策略、合并门禁
 - [项目规划](./plans/) — 重大变更的实现规划文档

@@ -47,9 +47,7 @@ services:
       - SOCKS_PORT=7891
       - MIXED_PORT=7892
 
-      # ========== 内核选择(可选) ==========
-      # 默认 standard;订阅含 type: smart 时改 KERNEL=smart(需重启容器)
-      # - KERNEL=smart
+      # 内核固定为 Smart (vernesong/mihomo Smart fork),无需额外配置
 
       # ========== 其它可选覆写 ==========
       # - IPV6_ENABLED=true

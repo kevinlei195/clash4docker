@@ -18,12 +18,10 @@
 set -euo pipefail
 
 # ───── 静态元数据(与 Dockerfile 中 ARG 默认值同步) ─────
-readonly DEFAULT_FLAVORS="both"
 readonly DEFAULT_UI="metacubexd"
-readonly DEFAULT_MIHOMO_VERSION="v1.19.31"
 readonly DEFAULT_MIHOMO_REPO_SMART="vernesong/mihomo"
 readonly DEFAULT_MIHOMO_TAG_SMART="Prerelease-Alpha"
-readonly DEFAULT_MIHOMO_SHORT_SHA_SMART="83e67d0"
+readonly DEFAULT_MIHOMO_SHORT_SHA_SMART=""
 readonly DEFAULT_METACUBEXD_VERSION="v1.273.1"
 readonly DEFAULT_ZASHBOARD_VERSION="v3.29.1"
 readonly DEFAULT_BUILDER="glash-builder"
@@ -31,8 +29,7 @@ readonly DEFAULT_PLATFORM="linux/amd64"
 readonly DEFAULT_TAG_PREFIX="glash-dev"
 readonly SCRIPT_NAME="build-interactive.sh"
 
-# 允许的 FLAVORS / UI 取值
-readonly VALID_FLAVORS=("both" "standard" "smart")
+# 允许的 UI 取值
 readonly VALID_UI=("metacubexd" "zashboard")
 
 # ───── 颜色与日志 ─────
@@ -108,6 +105,25 @@ ask_text() {
     printf '%s\n' "${ans}"
 }
 
+# ask_text_optional "prompt" "default" -> stdout
+# 与 ask_text 类似,但允许默认值/答案为空(用于"留空表示自动解析"这类参数)
+ask_text_optional() {
+    local prompt="$1" default="${2:-}"
+    local ans
+    if have_tty; then
+        if [ -n "${default}" ]; then
+            read -rp "${prompt} [${default}]: " ans
+        else
+            read -rp "${prompt} [留空=自动解析]: " ans
+        fi
+    else
+        printf '%s\n' "${default}"
+        return
+    fi
+    ans="${ans:-${default}}"
+    printf '%s\n' "${ans}"
+}
+
 # ask_choice "prompt" "default_index" "opt1" "opt2" ... -> stdout (选择值)
 ask_choice() {
     local prompt="$1" default_idx="${2:-1}"; shift 2
@@ -156,9 +172,7 @@ ask_yes_no() {
 }
 
 # ───── 状态与命令行参数 ─────
-FLAVORS=""
 UI=""
-MIHOMO_VERSION=""
 MIHOMO_REPO_SMART=""
 MIHOMO_TAG_SMART=""
 MIHOMO_SHORT_SHA_SMART=""
@@ -180,23 +194,23 @@ ${SCRIPT_NAME} — glash 交互式镜像构建脚本
   ${SCRIPT_NAME} [选项]
 
 模式:
-  (无)                简单模式,只问 FLAVORS / UI / tag / platform / 加载方式
-  --advanced          高级模式,展开全部 7 个 build-arg
+  (无)                简单模式,只问 UI / tag / platform / 加载方式
+  --advanced          高级模式,展开全部 build-arg
 
 构建参数(可用作命令行覆盖,非交互场景):
-  --flavors VAL       FLAVORS  (both|standard|smart,默认 both)
   --ui VAL            UI       (metacubexd|zashboard,默认 metacubexd)
-  --mihomo-version V  MIHOMO_VERSION
   --metacubexd-version V
   --zashboard-version V
   --mihomo-repo-smart V
   --mihomo-tag-smart V
   --mihomo-short-sha-smart V
+                      MIHOMO_SHORT_SHA_SMART,7 位 hex。留空则构建时
+                      自动从上游 release 解析最新资产(推荐)
 
 执行:
   --builder NAME      buildx 实例名(默认 ${DEFAULT_BUILDER})
   --platform P        目标平台,逗号分隔(默认 ${DEFAULT_PLATFORM})
-  --tag T             输出 tag(默认根据 FLAVORS 与 UI 自动生成)
+  --tag T             输出 tag(默认根据 UI 自动生成)
   --load              加载到本地 docker(--load)
   --push              推送到 registry(--push);可与 --user 配合设默认仓库
   --user NAME         推送时使用的默认仓库用户名前缀,如 --push --user foo
@@ -208,10 +222,10 @@ ${SCRIPT_NAME} — glash 交互式镜像构建脚本
 
 示例:
   ${SCRIPT_NAME}                                       # 简单模式全交互
-  ${SCRIPT_NAME} --flavors smart --ui zashboard        # 命令行覆盖关键参数
+  ${SCRIPT_NAME} --ui zashboard                        # 命令行覆盖关键参数
   ${SCRIPT_NAME} --advanced --dry-run                  # 高级模式只打命令
   ${SCRIPT_NAME} --platform linux/arm64,linux/amd64    # 跨平台(配合 --push)
-  ${SCRIPT_NAME} --push --user gangz1o --tag my:glash  # 推送到 Docker Hub
+  ${SCRIPT_NAME} --push --user myaccount --tag my:glash  # 推送到自己的 registry
 EOF
 }
 
@@ -222,9 +236,7 @@ parse_args() {
             -h|--help)              print_help; exit 0 ;;
             --advanced)             ADVANCED=1 ;;
             --dry-run)              DRY_RUN=1 ;;
-            --flavors)              FLAVORS="$2"; shift ;;
             --ui)                   UI="$2"; shift ;;
-            --mihomo-version)       MIHOMO_VERSION="$2"; shift ;;
             --metacubexd-version)   METACUBEXD_VERSION="$2"; shift ;;
             --zashboard-version)    ZASHBOARD_VERSION="$2"; shift ;;
             --mihomo-repo-smart)    MIHOMO_REPO_SMART="$2"; shift ;;
@@ -247,14 +259,8 @@ parse_args() {
 
 # 校验已设定的值(set -e 下不能写 `! cmd && die` 模式,改用 if)
 validate_provided() {
-    if [ -n "${FLAVORS}" ] && ! in_array "${FLAVORS}" "${VALID_FLAVORS[@]}"; then
-        die "--flavors 必须是 ${VALID_FLAVORS[*]}"
-    fi
     if [ -n "${UI}" ] && ! in_array "${UI}" "${VALID_UI[@]}"; then
         die "--ui 必须是 ${VALID_UI[*]}"
-    fi
-    if [ -n "${MIHOMO_VERSION}" ] && ! is_semver "${MIHOMO_VERSION}"; then
-        die "--mihomo-version 形如 v1.2.3"
     fi
     if [ -n "${METACUBEXD_VERSION}" ] && ! is_semver "${METACUBEXD_VERSION}"; then
         die "--metacubexd-version 形如 v1.2.3"
@@ -308,31 +314,26 @@ ensure_builder() {
 print_banner() {
     printf '\n%b%s%b\n' "${C_BOLD}" "glash 交互式镜像构建脚本" "${C_RESET}"
     printf '镜像源: Dockerfile (本仓库)\n'
-    printf '本仓库不发布官方镜像;本脚本用于本地自构建,适合自定义 FLAVORS / UI / 内核版本\n\n'
+    printf '内核: Smart (vernesong/mihomo) — SHA 留空时自动解析上游最新资产\n'
+    printf '本仓库不发布官方镜像;本脚本用于本地自构建,适合自定义 UI / 内核版本\n\n'
 }
 
 # 简单模式
 collect_simple() {
-    log_step "1) FLAVORS — 内核组合"
-    FLAVORS=$(ask_choice "选择 FLAVORS:" 1 \
-        "both      - 双内核(默认)" \
-        "standard  - 仅标准内核" \
-        "smart     - 仅 Smart 内核")
-
-    log_step "2) UI — Dashboard"
+    log_step "1) UI — Dashboard"
     UI=$(ask_choice "选择 UI:" 1 \
         "metacubexd - MetaCubeX/metacubexd(默认)" \
         "zashboard  - Zephyruso/zashboard")
 
-    log_step "3) TAG — 输出镜像 tag"
+    log_step "2) TAG — 输出镜像 tag"
     local default_tag
-    default_tag="${DEFAULT_TAG_PREFIX}:${FLAVORS}-${UI}"
+    default_tag="${DEFAULT_TAG_PREFIX}:${UI}"
     TAG=$(ask_text "输出 tag" "${default_tag}")
 
-    log_step "4) PLATFORM — 目标平台"
+    log_step "3) PLATFORM — 目标平台"
     PLATFORM=$(ask_text "目标平台(逗号分隔)" "${DEFAULT_PLATFORM}")
 
-    log_step "5) 加载方式"
+    log_step "4) 加载方式"
     OUTPUT_MODE=$(ask_choice "如何处理构建产物?" 1 \
         "load  - 加载到本地 docker(默认)" \
         "push  - 推送到 registry")
@@ -344,29 +345,24 @@ collect_simple() {
 
 # 高级模式
 collect_advanced() {
-    log_step "1) FLAVORS — 内核组合"
-    FLAVORS=$(ask_choice "选择 FLAVORS:" 1 \
-        "both" "standard" "smart")
-
-    log_step "2) UI — Dashboard"
+    log_step "1) UI — Dashboard"
     UI=$(ask_choice "选择 UI:" 1 \
         "metacubexd" "zashboard")
 
-    log_step "3) TAG — 输出镜像 tag"
-    local default_tag="${DEFAULT_TAG_PREFIX}:${FLAVORS}-${UI}"
+    log_step "2) TAG — 输出镜像 tag"
+    local default_tag="${DEFAULT_TAG_PREFIX}:${UI}"
     TAG=$(ask_text "输出 tag" "${default_tag}")
 
-    log_step "4) PLATFORM"
+    log_step "3) PLATFORM"
     PLATFORM=$(ask_text "目标平台" "${DEFAULT_PLATFORM}")
 
-    log_step "5) 加载方式"
+    log_step "4) 加载方式"
     OUTPUT_MODE=$(ask_choice "如何处理构建产物?" 1 "load" "push")
     if [ "${OUTPUT_MODE}" = "push" ]; then
         PUSH_USER=$(ask_text "推送仓库用户名前缀(留空用 docker login 账户)" "")
     fi
 
-    log_step "6) 进阶 build-arg(回车使用默认值)"
-    MIHOMO_VERSION=$(ask_text        "MIHOMO_VERSION"          "${DEFAULT_MIHOMO_VERSION}")
+    log_step "5) 进阶 build-arg(回车使用默认值)"
     if [ "${UI}" = "metacubexd" ]; then
         METACUBEXD_VERSION=$(ask_text "METACUBEXD_VERSION"     "${DEFAULT_METACUBEXD_VERSION}")
     else
@@ -377,31 +373,23 @@ collect_advanced() {
     else
         ZASHBOARD_VERSION="${DEFAULT_ZASHBOARD_VERSION}"
     fi
-    if [ "${FLAVORS}" = "smart" ] || [ "${FLAVORS}" = "both" ]; then
-        MIHOMO_REPO_SMART=$(ask_text       "MIHOMO_REPO_SMART"        "${DEFAULT_MIHOMO_REPO_SMART}")
-        MIHOMO_TAG_SMART=$(ask_text        "MIHOMO_TAG_SMART"         "${DEFAULT_MIHOMO_TAG_SMART}")
-        MIHOMO_SHORT_SHA_SMART=$(ask_text  "MIHOMO_SHORT_SHA_SMART"   "${DEFAULT_MIHOMO_SHORT_SHA_SMART}")
-    else
-        MIHOMO_REPO_SMART="${DEFAULT_MIHOMO_REPO_SMART}"
-        MIHOMO_TAG_SMART="${DEFAULT_MIHOMO_TAG_SMART}"
-        MIHOMO_SHORT_SHA_SMART="${DEFAULT_MIHOMO_SHORT_SHA_SMART}"
-    fi
+    MIHOMO_REPO_SMART=$(ask_text       "MIHOMO_REPO_SMART"        "${DEFAULT_MIHOMO_REPO_SMART}")
+    MIHOMO_TAG_SMART=$(ask_text        "MIHOMO_TAG_SMART"         "${DEFAULT_MIHOMO_TAG_SMART}")
+    MIHOMO_SHORT_SHA_SMART=$(ask_text_optional "MIHOMO_SHORT_SHA_SMART(留空=自动解析)" "${DEFAULT_MIHOMO_SHORT_SHA_SMART}")
 }
 
 # 应用默认值(空值填默认)
 apply_defaults() {
-    : "${FLAVORS:=${DEFAULT_FLAVORS}}"
     : "${UI:=${DEFAULT_UI}}"
     : "${BUILDER:=${DEFAULT_BUILDER}}"
     : "${PLATFORM:=${DEFAULT_PLATFORM}}"
-    : "${MIHOMO_VERSION:=${DEFAULT_MIHOMO_VERSION}}"
     : "${METACUBEXD_VERSION:=${DEFAULT_METACUBEXD_VERSION}}"
     : "${ZASHBOARD_VERSION:=${DEFAULT_ZASHBOARD_VERSION}}"
     : "${MIHOMO_REPO_SMART:=${DEFAULT_MIHOMO_REPO_SMART}}"
     : "${MIHOMO_TAG_SMART:=${DEFAULT_MIHOMO_TAG_SMART}}"
     : "${MIHOMO_SHORT_SHA_SMART:=${DEFAULT_MIHOMO_SHORT_SHA_SMART}}"
     : "${OUTPUT_MODE:=load}"
-    : "${TAG:=${DEFAULT_TAG_PREFIX}:${FLAVORS}-${UI}}"
+    : "${TAG:=${DEFAULT_TAG_PREFIX}:${UI}}"
 
     validate_provided
 }
@@ -411,9 +399,7 @@ build_command() {
     local cmd=()
     cmd+=(docker buildx build)
     cmd+=(--builder "${BUILDER}")
-    cmd+=(--build-arg "FLAVORS=${FLAVORS}")
     cmd+=(--build-arg "UI=${UI}")
-    cmd+=(--build-arg "MIHOMO_VERSION=${MIHOMO_VERSION}")
     cmd+=(--build-arg "MIHOMO_REPO_SMART=${MIHOMO_REPO_SMART}")
     cmd+=(--build-arg "MIHOMO_TAG_SMART=${MIHOMO_TAG_SMART}")
     cmd+=(--build-arg "MIHOMO_SHORT_SHA_SMART=${MIHOMO_SHORT_SHA_SMART}")
@@ -469,11 +455,11 @@ main() {
 
     print_banner
 
-    if have_tty || [ "${ADVANCED}" -eq 1 ] || [ -n "${FLAVORS}${UI}${MIHOMO_VERSION}${METACUBEXD_VERSION}${ZASHBOARD_VERSION}${MIHOMO_SHORT_SHA_SMART}${PLATFORM}${TAG}${OUTPUT_MODE}${PUSH_USER}" ]; then
+    if have_tty || [ "${ADVANCED}" -eq 1 ] || [ -n "${UI}${METACUBEXD_VERSION}${ZASHBOARD_VERSION}${MIHOMO_SHORT_SHA_SMART}${PLATFORM}${TAG}${OUTPUT_MODE}${PUSH_USER}" ]; then
         # 至少有一个覆盖 / 显式要求高级模式 / 有 TTY 才走交互
         if [ "${ADVANCED}" -eq 1 ]; then
             collect_advanced
-        elif have_tty && [ -z "${FLAVORS}${UI}${TAG}${PLATFORM}${OUTPUT_MODE}${PUSH_USER}${BUILDER}" ]; then
+        elif have_tty && [ -z "${UI}${TAG}${PLATFORM}${OUTPUT_MODE}${PUSH_USER}${BUILDER}" ]; then
             collect_simple
         fi
     fi

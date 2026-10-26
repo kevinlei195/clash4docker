@@ -1,6 +1,8 @@
 # 国内构建指南
 
 > 国内网络环境下构建 Clash for Docker(glash) 的镜像、推送镜像、以及推送到 Gitea 等场景的注意事项与解决方案。
+>
+> 通用构建流程见 [`./manual-build.md`](./manual-build.md);本文只覆盖国内网络特有的问题。
 
 ## 概览
 
@@ -266,7 +268,6 @@ Fork 提交的 CI workflow 按只读权限运行,无仓库 secrets。如需让 f
 docker login
 
 docker buildx build --builder glash-builder \
-  --build-arg FLAVORS=both \
   --platform linux/amd64,linux/arm64,linux/arm/v7 \
   --tag <your-account>/glash:latest \
   --push .
@@ -345,11 +346,19 @@ git push-all master
 
 ## Smart 内核构建
 
-Smart 内核已整合进主镜像,通过 `KERNEL=smart` 环境变量启用。详细用法见 [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md)。
+镜像只包含 Smart 内核(vernesong/mihomo fork)。详细用法见 [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md)。
 
-如果只需要 Smart 内核(缩减镜像体积),构建时指定 `--build-arg FLAVORS=smart` 或 `=standard`/`=both`。参数说明见 [`../configuration/build-flavors.md`](../configuration/build-flavors.md)。
+Smart 内核资产命名 `mihomo-linux-${ARCH}-alpha-smart-${SHA}.gz`(amd64 优先取 `-compatible-` 变体),上游地址为 `https://github.com/vernesong/mihomo/releases/download/${MIHOMO_TAG_SMART}/...`。
 
-Smart 内核资产命名 `mihomo-linux-${ARCH}-alpha-smart-${MIHOMO_SHORT_SHA_SMART}.gz`,Mihomo 上游为 `https://github.com/vernesong/mihomo/releases/download/${MIHOMO_TAG_SMART}/...`,构建时由 `docker/build-helpers/download-mihomo.sh` 拼装。所有方案 A-E 中的 GitHub 资源下载策略对 Smart 内核同样适用 — 镜像代理 URL 模板仍为 `https://gh-proxy.com/<原 URL>`。
+上游的 `Prerelease-Alpha` 是**滚动 tag**,资产名内嵌的 SHA 会随上游提交变化。构建时:
+
+- **留空 `MIHOMO_SHORT_SHA_SMART`**(默认)—— 调 GitHub API 列出实际资产名再下载,自动跟随上游。该 API 调用需要访问 `api.github.com`
+- **显式指定 SHA** —— 跳过 API 查询,适合 API 受限或离线场景:
+  ```bash
+  docker buildx build --build-arg MIHOMO_SHORT_SHA_SMART=4624551 ...
+  ```
+
+所有方案 A-E 中的 GitHub 资源下载策略对 Smart 内核同样适用 —— 镜像代理 URL 模板仍为 `https://gh-proxy.com/<原 URL>`。注意 API 请求也需走代理时,给 `curl` 配 `HTTPS_PROXY` 环境变量即可。
 
 ---
 

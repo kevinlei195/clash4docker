@@ -82,8 +82,7 @@ jobs:
       - name: Run module regression tests
         run: bash tests/test_modules.sh
 
-      - name: Run kernel selection tests
-        run: bash tests/test_kernel.sh
+      # 注:test_kernel.sh 需要已构建的镜像与 Docker,在 smoke job 中运行
 
       - name: Run build interactive script tests
         run: bash tests/test_build_interactive.sh
@@ -103,7 +102,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build AMD64 both-kernels image
+      - name: Build AMD64 image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -111,26 +110,37 @@ jobs:
           tags: glash-ci:amd64
           load: true
           push: false
-          build-args: FLAVORS=both
 
-      - name: Run AMD64 container smoke test (both kernels)
+      - name: Run AMD64 container smoke test
         run: bash tests/test_container.sh glash-ci:amd64
 
-      - name: Build AMD64 standard-only image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64
-          tags: glash-ci-standard:amd64
-          load: true
-          push: false
-          build-args: FLAVORS=standard
+      - name: Run kernel assertion tests (Smart only)
+        run: bash tests/test_kernel.sh glash-ci:amd64
 
-      - name: Run standard-only smoke (KERNEL=smart should fail)
-        run: bash tests/test_kernel_absence.sh glash-ci-standard:amd64
+  kernel-sha:
+    name: Smart kernel asset check
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify upstream Smart kernel asset resolves
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/kernel-check
+          sh docker/build-helpers/download-mihomo.sh \
+            amd64 vernesong/mihomo Prerelease-Alpha "" /tmp/kernel-check
+          /tmp/kernel-check/mihomo -v
+          /tmp/kernel-check/mihomo -v | grep -qi 'alpha-smart' \
+            || { echo "::error::解析到的内核不是 Smart 版本"; exit 1; }
 
   build:
-    name: Build ${{ matrix.platform }} (FLAVORS=${{ matrix.flavors }})
+    name: Build ${{ matrix.platform }}
     needs: changes
     if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
@@ -142,9 +152,6 @@ jobs:
           - linux/amd64
           - linux/arm64
           - linux/arm/v7
-        flavors:
-          - both
-          - standard
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -165,7 +172,6 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: false
           outputs: type=cacheonly
-          build-args: FLAVORS=${{ matrix.flavors }}
 
   ci-gate:
     name: CI Gate
@@ -173,6 +179,7 @@ jobs:
       - changes
       - shell
       - smoke
+      - kernel-sha
       - build
     if: always()
     runs-on: ubuntu-latest
@@ -183,6 +190,7 @@ jobs:
           CHANGES_RESULT: ${{ needs.changes.result }}
           SHELL_RESULT: ${{ needs.shell.result }}
           SMOKE_RESULT: ${{ needs.smoke.result }}
+          KERNEL_SHA_RESULT: ${{ needs.kernel-sha.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           RUNTIME_CHANGED: ${{ needs.changes.outputs.runtime }}
         run: |
@@ -208,10 +216,12 @@ jobs:
           case "$RUNTIME_CHANGED" in
             true)
               report_stage "AMD64 runtime smoke" "$SMOKE_RESULT" "success"
+              report_stage "Smart kernel asset check" "$KERNEL_SHA_RESULT" "success"
               report_stage "platform builds" "$BUILD_RESULT" "success"
               ;;
             false)
               report_stage "AMD64 runtime smoke" "$SMOKE_RESULT" "skipped"
+              report_stage "Smart kernel asset check" "$KERNEL_SHA_RESULT" "skipped"
               report_stage "platform builds" "$BUILD_RESULT" "skipped"
               ;;
             *)

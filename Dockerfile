@@ -1,32 +1,25 @@
 # glash - Clash Docker 镜像
-# 基于 Mihomo 内核 + 多种 Dashboard
+# 基于 Mihomo Smart 内核(vernesong/mihomo fork)+ 多种 Dashboard
 # 作者: gangz1o
 #
-# 通过 FLAVORS build-arg 决定镜像包含的内核,可选项:
-#   standard  - 仅标准内核(MetaCubeX/mihomo)
-#   smart     - 仅 Smart 内核(vernesong/mihomo)
-#   both      - 同时打包两种(默认)
+# 镜像只包含 Smart 内核,支持 type: smart 策略组、ASN 偏好等增强特性。
 #
 # 通过 UI build-arg 决定打包的 Dashboard:
 #   metacubexd - MetaCubeX/metacubexd(默认)
 #   zashboard  - Zephyruso/zashboard
 #
-# 运行时通过 KERNEL 环境变量在 standard 与 smart 之间切换
-# (默认 standard)。切换 KERNEL 不会重启容器,需要用户显式重启。
+# 内核版本通过 MIHOMO_SHORT_SHA_SMART 固定;留空则构建时自动从
+# vernesong/mihomo 的 Prerelease-Alpha release 中解析最新资产。
 
-ARG FLAVORS=both
 ARG UI=metacubexd
-ARG MIHOMO_VERSION=v1.19.31
 ARG MIHOMO_REPO_SMART=vernesong/mihomo
 ARG MIHOMO_TAG_SMART=Prerelease-Alpha
-ARG MIHOMO_SHORT_SHA_SMART=83e67d0
+ARG MIHOMO_SHORT_SHA_SMART=""
 ARG METACUBEXD_VERSION=v1.273.1
 ARG ZASHBOARD_VERSION=v3.29.1
 
 FROM --platform=$BUILDPLATFORM alpine:3.19 AS builder
-ARG FLAVORS
 ARG UI
-ARG MIHOMO_VERSION
 ARG MIHOMO_REPO_SMART
 ARG MIHOMO_TAG_SMART
 ARG MIHOMO_SHORT_SHA_SMART
@@ -39,45 +32,30 @@ RUN apk add --no-cache curl unzip ca-certificates
 WORKDIR /build
 COPY docker/build-helpers/ /tmp/h/
 
-# 预创建两个目标目录,使 COPY 在 FLAVORS 不包含某个内核时也能找到源路径(取空)。
-RUN mkdir -p /build/mihomo-standard /build/mihomo-smart
-
-# 标准内核
-RUN case "${FLAVORS}" in \
-        standard|both) \
-            /tmp/h/download-mihomo.sh standard \
-                "${TARGETARCH}" "${MIHOMO_VERSION}" "" "" "" /build/mihomo-standard ;; \
-    esac
-
-# Smart 内核
-RUN case "${FLAVORS}" in \
-        smart|both) \
-            /tmp/h/download-mihomo.sh smart \
-                "${TARGETARCH}" "" "${MIHOMO_REPO_SMART}" "${MIHOMO_TAG_SMART}" "${MIHOMO_SHORT_SHA_SMART}" /build/mihomo-smart ;; \
-    esac
+# Smart 内核(仅此一种)
+RUN /tmp/h/download-mihomo.sh \
+    "${TARGETARCH}" "${MIHOMO_REPO_SMART}" "${MIHOMO_TAG_SMART}" \
+    "${MIHOMO_SHORT_SHA_SMART}" /build/mihomo-out
 
 # Dashboard + GeoIP / GeoSite / Country.mmdb
 RUN /tmp/h/download-assets.sh "${UI}" "${METACUBEXD_VERSION}" "${ZASHBOARD_VERSION}"
 
 # 最终镜像
 FROM alpine:3.19
-ARG FLAVORS
 ARG UI
 
 LABEL maintainer="gangz1o" \
-      description="Clash Docker with Mihomo Core and Dashboard - Subscription Support" \
-      org.opencontainers.image.flavors="${FLAVORS}" \
+      description="Clash Docker with Mihomo Smart Core and Dashboard - Subscription Support" \
       org.opencontainers.image.dashboard="${UI}"
 
 # 安装运行时依赖
 # curl: 用于下载订阅配置
 # sed/grep: 用于处理配置文件
 RUN apk add --no-cache ca-certificates tzdata bash tini curl sed grep flock && \
-    mkdir -p /opt/mihomo/standard /opt/mihomo/smart /app /app/ui /app/geodata /root/.config/mihomo /var/log
+    mkdir -p /app /app/ui /app/geodata /root/.config/mihomo /var/log
 
-# 从构建阶段复制文件(条件化,FLAVORS 不包含的内核层缺位时为空目录)
-COPY --from=builder /build/mihomo-standard /opt/mihomo/standard/
-COPY --from=builder /build/mihomo-smart /opt/mihomo/smart/
+# 从构建阶段复制文件
+COPY --from=builder /build/mihomo-out/mihomo /app/mihomo
 COPY --from=builder /build/ui /app/ui
 # Geodata 放在 /app/geodata,启动时复制到配置目录
 COPY --from=builder /build/geodata /app/geodata
@@ -86,15 +64,9 @@ COPY --from=builder /build/geodata /app/geodata
 COPY start.sh /app/start.sh
 COPY lib /app/lib
 
-# 设置执行权限与默认软链:仅在 standard 存在时设置,smart 不在镜像中时 KERNEL=smart 会启动报错
+# 设置执行权限
 RUN set -eux; \
-    if [ -f /opt/mihomo/standard/mihomo ]; then \
-        chmod +x /opt/mihomo/standard/mihomo; \
-        ln -sf /opt/mihomo/standard/mihomo /app/mihomo; \
-    fi; \
-    if [ -f /opt/mihomo/smart/mihomo ]; then \
-        chmod +x /opt/mihomo/smart/mihomo; \
-    fi; \
+    chmod +x /app/mihomo; \
     chmod +x /app/start.sh /app/lib/glash/*.sh
 
 # 设置环境变量
