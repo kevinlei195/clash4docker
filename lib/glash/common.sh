@@ -10,29 +10,18 @@ UPDATE_SCRIPT='/app/update_sub.sh'
 PID_FILE="${PID_FILE:-/var/run/mihomo.pid}"
 UPDATE_LOCK_FILE="${UPDATE_LOCK_FILE:-/var/run/glash-subscription-update.lock}"
 MIHOMO_BIN="${MIHOMO_BIN:-/app/mihomo}"
-# 解析 KERNEL=standard|smart(默认 standard) 并重写 MIHOMO_BIN 指向的软链
-# 当镜像同时打包两个内核时(/opt/mihomo/standard 与 /opt/mihomo/smart),通过软链切换;
-# 当镜像只打包 standard 时,链接到 /app/mihomo 仍是普通文件,本函数退化为 no-op。
+# 镜像只包含 Smart 内核(vernesong/mihomo fork)。
+# 历史上镜像同时打包 standard 与 smart,靠 KERNEL 环境变量切换软链;
+# 现在内核唯一,本函数只做 KERNEL 取值校验,不再切换任何链接。
 resolve_mihomo_binary() {
-    local flavor="${KERNEL:-standard}"
+    local flavor="${KERNEL:-smart}"
     case "${flavor}" in
-        standard|smart)
-            if [ ! -x "/opt/mihomo/${flavor}/mihomo" ]; then
-                # 内核缺位(例如只构建了 standard 的镜像),让 MIHOMO_BIN 仍指向 /app/mihomo,
-                # 这样老的标准镜像构建方式依然能跑。KERNEL=smart 时返回错误。
-                if [ "${flavor}" = "smart" ]; then
-                    log_error "❌ 当前镜像未包含 Smart 内核。请重新构建镜像时加入 FLAVORS=smart 或 FLAVORS=both。"
-                    return 1
-                fi
-                log_info "🔧 当前内核: standard (使用 /app/mihomo)"
-                return 0
-            fi
-            ln -sfn "/opt/mihomo/${flavor}/mihomo" "${MIHOMO_BIN}"
-            log_info "🔧 当前内核: ${flavor} (${MIHOMO_BIN} → /opt/mihomo/${flavor}/mihomo)"
+        smart)
+            log_info "🔧 当前内核: smart (${MIHOMO_BIN})"
             return 0
             ;;
         *)
-            log_error "❌ KERNEL='${flavor}' 不支持(应为 standard|smart)"
+            log_error "❌ KERNEL='${flavor}' 不支持(当前镜像只包含 smart 内核)"
             return 1
             ;;
     esac

@@ -6,6 +6,7 @@
 
 - **Shell tests**：运行 `tests/test_mode.sh` 和 `tests/test_reload.sh`，覆盖启动配置和订阅热加载行为。
 - **AMD64 runtime smoke**：构建并启动 `linux/amd64` 镜像，使用仓库内非敏感 fixture 检查容器健康状态、`/version`、`/ui/`，以及调用方 `SAFE_PATHS` 是否保留。
+- **Smart kernel asset check**：调 GitHub API 校验上游 Smart 内核资产可解析，并确认版本标识含 `alpha-smart`。上游 `Prerelease-Alpha` 是滚动 tag，此检查用于防止资产改名导致的静默失效。
 - **Platform builds**：无发布地构建 `linux/amd64`、`linux/arm64` 和 `linux/arm/v7`。
 - **CI Gate**：汇总上述层的结果。它是唯一需要加入分支保护的状态检查；其他 job 名称用于定位失败原因。
 

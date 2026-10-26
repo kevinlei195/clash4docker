@@ -4,7 +4,7 @@
 #
 # 关键点(部署此模式请通读全文,需宿主侧配套):
 # - 使用 host 网络(性能 + 直接监听 7890/9090)
-# - KERNEL=smart(便于整网流量按 ASN 自动选择)
+# - 内核固定为 Smart (vernesong/mihomo Smart fork,便于整网流量按 ASN 自动选择)
 # - TUN 启用,容器侧 mihomo 通过虚拟网卡接管所有出网流量
 # - 宿主侧需做:启用 IP 转发、配置 iptables NAT、关闭宿主机对外直连
 #   (或在路由器层把所有设备网关指向 NAS IP)
@@ -34,9 +34,6 @@ services:
 
     environment:
       - TZ=Asia/Shanghai
-
-      # ========== 内核 ==========
-      - KERNEL=smart
 
       # ========== TUN ==========
       - TUN_ENABLED=true

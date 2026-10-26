@@ -4,7 +4,7 @@
 # 关键点:
 # - ./config 目录必须可写(订阅下载、env 覆写、Hook 都会写入此目录)
 # - 必填:SUB_URL,SECRET;推荐:HTTP_PORT/SOCKS_PORT/MIXED_PORT 固定端口
-# - 切换 KERNEL=smart 时需重启容器
+# - 内核固定为 Smart (vernesong/mihomo Smart fork)
 services:
   glash:
     image: gangz1o/glash:latest
@@ -37,9 +37,7 @@ services:
       - SOCKS_PORT=7891
       - MIXED_PORT=7892
 
-      # ========== 内核选择(可选) ==========
-      # 默认 standard;订阅里出现 type: smart 策略组时改 smart,需重启容器
-      # - KERNEL=smart
+      # 内核固定为 Smart (vernesong/mihomo Smart fork),无需额外配置
 
       # ========== 其它可选覆写(取消注释启用) ==========
       # - IPV6_ENABLED=true

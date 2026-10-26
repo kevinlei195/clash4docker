@@ -1,6 +1,6 @@
 # 部署方式索引
 
-> glash 提供 6 种 compose 模板,分别覆盖最常见的部署场景。文件命名直接对应模式;按需 `docker compose -f docker-compose.<mode>.yml up -d` 即可。
+> glash 提供 5 种 compose 模板,分别覆盖最常见的部署场景。文件命名直接对应模式;按需 `docker compose -f docker-compose.<mode>.yml up -d` 即可。
 >
 > 本文档与 [`quickstart-subscription.md`](./quickstart-subscription.md) / [`quickstart-local.md`](./quickstart-local.md) 是互补关系:quickstart 用于"30 秒验证",本文给出"按场景选模板 + 组合 + 验证"。
 
@@ -13,31 +13,28 @@ Q1. 使用机场订阅 URL?
   ├─ 是 → 订阅模式 (docker-compose.subscription.yml)
   └─ 否 → 本地配置模式(默认 docker-compose.yml)
             │
-            Q2. 订阅/配置里出现 type: smart 策略组?
-            ├─ 是 → Smart 模式 (docker-compose.smart.yml)
-            └─ 否 → 标准内核
+            Q2. 想要容器内透明接管流量(TUN)?
+            ├─ 是 → TUN 模式 (docker-compose.tun.yml)
+            └─ 否 → 默认即可
                   │
-                  Q3. 想要容器内透明接管流量(TUN)?
-                  ├─ 是 → TUN 模式 (docker-compose.tun.yml)
-                  └─ 否 → 默认即可
-                        │
-                        Q4. 整台 NAS / 服务器作为网络出口?
-                        ├─ 是 → NAS / 网关模式 (docker-compose.nas-bridge.yml)
-                        └─ 否 → 改用 host 模式 (docker-compose.host.yml) 即可
+                  Q3. 整台 NAS / 服务器作为网络出口?
+                  ├─ 是 → NAS / 网关模式 (docker-compose.nas-bridge.yml)
+                  └─ 否 → 改用 host 模式 (docker-compose.host.yml) 即可
 ```
 
 > 不确定走哪一条?直接用 `docker-compose.yml`(默认本地模式)验证 mihomo 与镜像本身,再按需切换。
+>
+> 镜像只包含 Smart 内核,所有模板行为一致 —— 含 `type: smart` 策略组的订阅无需特殊模板。
 
 ## 2. 模式对照
 
-| 模式 | 文件 | KERNEL | 网络 | TUN | 订阅 | 挂载 | 适用场景 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 默认 / 本地 | `docker-compose.yml` | `standard` | bridge + 端口映射 | 否 | 可选 | `./config` 可写 | 通用默认;自维护 config.yaml |
-| 订阅 | `docker-compose.subscription.yml` | `standard` | bridge + 端口映射 | 否 | **必填** | `./config` 可写 | 机场订阅 + 定时更新 |
-| Smart | `docker-compose.smart.yml` | `smart` | bridge + 端口映射 | 否 | 可选 | `./config` 可写 | 订阅/配置含 `type: smart` 策略组 |
-| TUN | `docker-compose.tun.yml` | `standard` | bridge + 端口映射 | **是** | 可选 | `./config` 可写 | 容器内透明代理 |
-| Host | `docker-compose.host.yml` | `standard` | host | 否 | 可选 | `./config` 可写 | 性能敏感 / 直接监听宿主端口 |
-| NAS / 网关 | `docker-compose.nas-bridge.yml` | `smart` | host | **是** | 推荐 | `./config` 可写 | NAS 整网出口 / 家庭网关 |
+| 模式 | 文件 | 网络 | TUN | 订阅 | 挂载 | 适用场景 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 默认 / 本地 | `docker-compose.yml` | bridge + 端口映射 | 否 | 可选 | `./config` 可写 | 通用默认;自维护 config.yaml |
+| 订阅 | `docker-compose.subscription.yml` | bridge + 端口映射 | 否 | **必填** | `./config` 可写 | 机场订阅 + 定时更新 |
+| TUN | `docker-compose.tun.yml` | bridge + 端口映射 | **是** | 可选 | `./config` 可写 | 容器内透明代理 |
+| Host | `docker-compose.host.yml` | host | 否 | 可选 | `./config` 可写 | 性能敏感 / 直接监听宿主端口 |
+| NAS / 网关 | `docker-compose.nas-bridge.yml` | host | **是** | 推荐 | `./config` 可写 | NAS 整网出口 / 家庭网关 |
 
 > 默认情况下任何模板都可与"标准/智能内核"、"订阅/本地配置"自由组合。模板只是预设了最常见组合。
 
@@ -53,7 +50,7 @@ docker compose up -d
 docker compose logs -f glash
 ```
 
-订阅 / TUN / Smart 等高级功能全部以注释形式列出,按需取消注释即可。
+订阅 / TUN 等高级功能全部以注释形式列出,按需取消注释即可。
 
 ### 3.2 订阅模式(`docker-compose.subscription.yml`)
 
@@ -71,28 +68,9 @@ docker compose -f docker-compose.subscription.yml logs -f glash
 **关键点**:
 - `./config` 目录必须可写(订阅下载、env 覆写、Hook 都会写入此目录)
 - `HTTP_PORT` / `SOCKS_PORT` / `MIXED_PORT` 推荐设置,固定端口避免订阅更新后端口跳变
-- 切换 `KERNEL=smart` 时需重启容器
+- 镜像使用 Smart 内核,订阅里出现 `type: smart` 策略组可直接使用
 
-### 3.3 Smart 模式(`docker-compose.smart.yml`)
-
-启用 Smart 内核,适合订阅/配置中包含 `type: smart` 策略组、ASN 偏好或希望使用 LightGBM 自动选优的场景。
-
-```bash
-docker compose -f docker-compose.smart.yml up -d
-# 验证
-docker exec glash /app/mihomo -v
-# 期望:alpha-smart-<SHA>
-
-curl -sH "Authorization: Bearer $SECRET" http://127.0.0.1:9090/group/weights
-# 期望:{"errors":{},"weights":{"🚀 Smart":null}}
-```
-
-**关键点**:
-- 默认构建(`FLAVORS=both`)的镜像同时打包 standard 与 smart,`KERNEL=smart` 决定用哪个
-- 纯标准订阅也能用 Smart 内核跑(它向后兼容 `type: select` / `url-test` / `fallback`)
-- 反之 Smart-only 配置在 standard 内核下会启动失败 — 见 [FAQ](#71-smart-策略组启动失败)
-
-### 3.4 TUN 模式(`docker-compose.tun.yml`)
+### 3.3 TUN 模式(`docker-compose.tun.yml`)
 
 容器内 mihomo 创建虚拟网卡,接管容器内所有出网流量。适合"应用在容器里、想让它走代理但不想逐个配代理"。
 
@@ -107,7 +85,7 @@ docker exec glash wget -qO- http://www.gstatic.com/generate_204
 - TUN **只影响容器自己的网络命名空间** — 宿主机与同宿主其它容器不会被自动接管
 - NAS 自定义内核(群晖 DSM 等)可能不兼容 `auto-redirect`,改 `TUN_AUTO_REDIRECT=false`
 
-### 3.5 Host 网络模式(`docker-compose.host.yml`)
+### 3.4 Host 网络模式(`docker-compose.host.yml`)
 
 容器共享宿主网络栈,7890/9090 等端口直接监听在宿主网卡上,绕过 docker NAT。
 
@@ -123,7 +101,7 @@ curl -sH "Authorization: Bearer $SECRET" http://127.0.0.1:9090/version
 - macOS / Windows 上 `network_mode: host` 实际是 docker-desktop 的虚拟网桥 — 仍可继续用 `ports`
 - 如需 TUN + host,优先看 `nas-bridge` 模板
 
-### 3.6 NAS / 网关模式(`docker-compose.nas-bridge.yml`)
+### 3.5 NAS / 网关模式(`docker-compose.nas-bridge.yml`)
 
 把 NAS(群晖 / 威联通 / 软路由 / 树莓派)整体变成家庭/办公室网络出口:Smart 内核 + TUN + host + 订阅 + DNS 接管。
 
@@ -140,15 +118,15 @@ docker compose -f docker-compose.nas-bridge.yml up -d
 
 模板的"模式"是预设,你可以叠加或裁剪。
 
-### 4.1 Smart + 订阅
+### 4.1 订阅
 
-最常见组合 — 直接用 `docker-compose.smart.yml`,打开 `SUB_URL` 注释(或复制 `docker-compose.subscription.yml` 模板并把 `KERNEL=standard` 改成 `KERNEL=smart`)。
+最常见组合 — 直接用 `docker-compose.subscription.yml`,打开 `SUB_URL` 注释。
 
-### 4.2 Smart + TUN
+### 4.2 TUN
 
-把 `docker-compose.tun.yml` 中的 `# - KERNEL=smart` 取消注释;或者以 `docker-compose.tun.yml` 为基线,启用 `KERNEL=smart`。
+用 `docker-compose.tun.yml` 作为基线,按需取消注释 `cap_add` 与 `devices`。
 
-### 4.3 Smart + TUN + Host
+### 4.3 TUN + Host
 
 直接 `docker-compose.nas-bridge.yml` 即可。
 
@@ -188,7 +166,7 @@ services:
 
 ```bash
 docker compose -f docker-compose.yml up -d              # 第一实例
-docker compose -f docker-compose.second.yml up -d       # 第二实例(KERNEL=smart 等差异化)
+docker compose -f docker-compose.second.yml up -d       # 第二实例(端口等差异化)
 ```
 
 ## 5. 迁移指南
@@ -200,18 +178,19 @@ docker compose -f docker-compose.second.yml up -d       # 第二实例(KERNEL=sm
 | 旧用法 | 新用法 |
 | --- | --- |
 | 取消注释启用订阅 | `cp docker-compose.subscription.yml docker-compose.yml && 编辑` 或 `docker compose -f docker-compose.subscription.yml up -d` |
-| 添加 `KERNEL=smart` | 在任一模板加 `- KERNEL=smart`,重启 |
-| 启用 TUN | 改用 `docker-compose.tun.yml`,按需加 `KERNEL=smart` |
+| 启用 TUN | 改用 `docker-compose.tun.yml` |
 
-### 5.2 从单内核镜像迁移到双内核
+### 5.2 从双内核镜像迁移到单一 Smart 内核
 
-早期镜像(如已停更的 `gangz1o/glash-smart`)只打包单一内核。当前默认构建(`FLAVORS=both`)同时打包 standard 与 smart,运行时由 `KERNEL=smart` 选择:
+早期镜像同时打包 standard 与 smart,靠 `KERNEL` 环境变量切换。当前镜像只包含 Smart 内核:
 
 | 旧 | 新 |
 | --- | --- |
-| `image: <旧镜像>:latest` | `image: <你的镜像>:latest`(自建产物) |
-| 自带单一内核 | 双内核打包,运行时由 `KERNEL=smart` 选择 |
-| (无) | `docker-compose.smart.yml` 模板可直接用 |
+| `KERNEL=standard` | 删除该环境变量(默认即 Smart) |
+| `KERNEL=smart` | 删除该环境变量(默认即 Smart) |
+| 双内核镜像 | 单一 Smart 内核,体积更小 |
+
+> 设置 `KERNEL=standard` 的旧配置在启动时会明确报错,按提示删除该行即可。
 
 ### 5.3 切换 Dashboard(zashboard)
 
@@ -219,7 +198,6 @@ Dashboard 由构建参数 `UI` 决定。默认打包 metacubexd;需要 zashboard
 
 ```bash
 docker buildx build \
-  --build-arg FLAVORS=both \
   --build-arg UI=zashboard \
   --platform linux/amd64 \
   -t my/glash:zashboard .
@@ -244,21 +222,17 @@ docker compose -f <your-file> ps
 
 # 2. 内核版本
 docker exec glash /app/mihomo -v
-# standard:v1.19.x ; smart:alpha-smart-<SHA>
+# 期望:alpha-smart-<SHA>
 
-# 3. 软链指向当前 KERNEL
-docker exec glash readlink -f /app/mihomo
-# /opt/mihomo/standard/mihomo 或 /opt/mihomo/smart/mihomo
-
-# 4. Controller 正常
+# 3. Controller 正常
 curl -sH "Authorization: Bearer $SECRET" http://127.0.0.1:9090/version
-# 期望:{"meta":true,"version":"..."}
+# 期望:{"meta":true,"version":"alpha-smart-<SHA>"}
 
-# 5. 代理端口监听
+# 4. 代理端口监听
 docker exec glash sh -c 'wget -qO- http://127.0.0.1:9090/proxies | head -c 200; echo'
 # 期望:看到 proxies 列表(订阅模式)或本地 config.yaml 内的节点
 
-# 6. 出网代理能跑
+# 5. 出网代理能跑
 curl -x http://127.0.0.1:7890 https://www.gstatic.com/generate_204 -o /dev/null -w "%{http_code}\n"
 # 期望:204
 ```
@@ -272,13 +246,9 @@ curl -x http://127.0.0.1:7890 https://www.gstatic.com/generate_204 -o /dev/null 
 - host 模式下:改 `HTTP_PORT=7895` 等环境变量,确保 7895 空闲
 - 或停掉冲突进程
 
-### 7.2 Smart 策略组启动失败
+### 7.2 启动报 "KERNEL='standard' 不支持"
 
-`docker logs glash` 报 `proxy group[0]: unsupported type: smart`:
-
-- 镜像是否包含 Smart 内核?`docker exec glash ls /opt/mihomo/smart/` 应有 `mihomo` 文件
-- 软链是否指对?`docker exec glash readlink -f /app/mihomo` 应是 `/opt/mihomo/smart/mihomo`
-- 若是自建镜像(只 `FLAVORS=standard`)要切到 Smart,需重新构建并加 `--build-arg FLAVORS=both` 或 `=smart`
+当前镜像只包含 Smart 内核。删除 compose 里的 `KERNEL` 环境变量(或改为 `KERNEL=smart`)后重启容器。
 
 ### 7.3 TUN 不工作
 
@@ -308,8 +278,8 @@ curl -x http://127.0.0.1:7890 https://www.gstatic.com/generate_204 -o /dev/null 
 | --- | --- |
 | 30 秒验证(订阅) | [`./quickstart-subscription.md`](./quickstart-subscription.md) |
 | 30 秒验证(本地) | [`./quickstart-local.md`](./quickstart-local.md) |
-| 内核选择(KERNEL) | [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md) |
-| 构建参数(FLAVORS) | [`../configuration/build-flavors.md`](../configuration/build-flavors.md) |
+| 内核说明(Smart) | [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md) |
+| Dashboard 选择(UI) | [`../configuration/build-flavors.md`](../configuration/build-flavors.md) |
 | 环境变量完整参考 | [`../configuration/environment-variables.md`](../configuration/environment-variables.md) |
 | TUN 模式详解 | [`../configuration/tun-mode.md`](../configuration/tun-mode.md) |
 | 故障排查 | [`../operations/troubleshooting.md`](../operations/troubleshooting.md) |

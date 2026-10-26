@@ -12,7 +12,7 @@
 | 必备 secret | 无 | 无(推到私有 registry 时需自行配置登录) |
 | 默认缓存 | GitHub Actions 用 GHA cache,Gitea 暂未启用 | 不使用(除非手动指定) |
 
-两条路径共用同一个 `Dockerfile`,运行时内核选择通过环境变量 `KERNEL=standard|smart`,构建期参数通过 `FLAVORS=standard|smart|both` 与 `UI=metacubexd|zashboard`。详见 [`../configuration/build-flavors.md`](../configuration/build-flavors.md) 与 [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md)。
+两条路径共用同一个 `Dockerfile`。镜像只包含 Smart 内核(vernesong/mihomo Smart fork),构建期参数只有 `UI=metacubexd|zashboard` 与内核版本相关参数(`MIHOMO_SHORT_SHA_SMART` 等)。详见 [`../configuration/build-flavors.md`](../configuration/build-flavors.md) 与 [`../configuration/kernel-selection.md`](../configuration/kernel-selection.md)。
 
 > **仓库不包含任何镜像发布路径**:没有 Release 触发的构建推送 workflow,也没有 registry 登录凭据。需要镜像产物时,用下面的手动构建流程自行构建并推送到你控制的 registry。
 
@@ -34,11 +34,10 @@
 
 1. **changes** — 用 `dorny/paths-filter` 判定本次变更是否涉及运行时(非纯文档),非运行时变更可跳过后续耗时任务
 2. **shell** — `bash -n` 语法检查 + `test_mode.sh` / `test_reload.sh` / `test_modules.sh` + Alpine BusyBox `awk` 环境回归
-3. **smoke** — `docker buildx` 构建 `glash-ci:amd64`(`FLAVORS=both`)与 `glash-ci-standard:amd64`(`FLAVORS=standard`),分别驱动 `test_container.sh` 与 `test_kernel_absence.sh`
-4. **build** — 三平台(`linux/amd64`、`linux/arm64`、`linux/arm/v7`) × 两种 `FLAVORS`(`both`、`standard`)的 `outputs: type=cacheonly` 矩阵,验证构建可成功
-5. **ci-gate** — 汇总前四段结果,作为 PR 合并门禁
-
-矩阵维度变化:本次集成后从原本的 `project: [clash4docker, clash4docker-smart]` 改为 `flavors: [both, standard]`。
+3. **smoke** — `docker buildx` 构建 `glash-ci:amd64`,驱动 `test_container.sh` 与 `test_kernel.sh`
+4. **kernel-sha** — 调 GitHub API 校验上游 Smart 内核资产可解析且版本标识含 `alpha-smart`
+5. **build** — 三平台(`linux/amd64`、`linux/arm64`、`linux/arm/v7`)的 `outputs: type=cacheonly` 矩阵,验证构建可成功
+6. **ci-gate** — 汇总前五段结果,作为 PR 合并门禁
 
 ### 发布边界
 
@@ -50,8 +49,7 @@
 
 `.gitea/workflows/ci.yml` 是 GitHub 工作流的等价镜像,默认行为一致:
 
-- 同样的 PR 矩阵与 smoke 构建
-- 默认 `FLAVORS=both`
+- 同样的 PR 矩阵、smoke 构建与内核资产校验
 - 同样只构建、不推送
 
 ### 与 GitHub 的差异
@@ -68,14 +66,16 @@
 
 | 升级项 | 涉及的文件/参数 |
 | --- | --- |
-| 标准内核版本(MetaCubeX/mihomo) | `Dockerfile` 改 `ARG MIHOMO_VERSION=vX.Y.Z` |
-| Smart 内核 SHA(vernesong/mihomo) | `Dockerfile` 改 `ARG MIHOMO_SHORT_SHA_SMART=<sha>`;若 release 通道变了再调 `MIHOMO_TAG_SMART` |
+| Smart 内核版本 | 留空 `MIHOMO_SHORT_SHA_SMART` 即自动跟随上游最新;需要固定版本时改 `Dockerfile` 的 `ARG MIHOMO_SHORT_SHA_SMART=<sha>` |
+| Smart 内核通道 | `Dockerfile` 改 `ARG MIHOMO_TAG_SMART=<tag>` 或 `ARG MIHOMO_REPO_SMART=<owner/repo>` |
 | MetacubexD Dashboard | `Dockerfile` 改 `ARG METACUBEXD_VERSION=vX.Y.Z`(`UI=metacubexd` 时生效) |
 | zashboard Dashboard | `Dockerfile` 改 `ARG ZASHBOARD_VERSION=vX.Y.Z`(`UI=zashboard` 时生效) |
 | buildx action 版本 | `.github/workflows/*.yml`、`.gitea/workflows/*.yml` 中的 `actions/checkout` / `docker/build-push-action` 版本号 |
 | alpine 基础镜像 | `Dockerfile` 两处 `FROM alpine:X.Y`(builder 与 runtime),保持一致 |
 
-升级后建议跑一次本地 `docker buildx build --build-arg FLAVORS=both --load .` 把 `tests/test_container.sh` 与 `tests/test_kernel*.sh` 跑一遍再合并。
+升级后建议跑一次本地 `docker buildx build --load .` 把 `tests/test_container.sh` 与 `tests/test_kernel.sh` 跑一遍再合并。
+
+> 上游 `Prerelease-Alpha` 是滚动 tag,资产名内嵌的 SHA 会随上游提交变化。`kernel-sha` job 会在 PR 时校验资产可解析,避免静默失效。
 
 ---
 
@@ -101,49 +101,46 @@ docker buildx create --name glash-builder --driver docker-container --use
 
 ## 标准构建(本地)
 
-### 1. 默认 —— 双内核 both
+### 1. 默认 —— Smart 内核 + metacubexd
 
 ```bash
 cd /path/to/clash4docker
 docker buildx build \
   --builder glash-builder \
-  --build-arg FLAVORS=both \
   --platform linux/amd64 \
   --load \
-  -t glash-dev:both .
+  -t glash-dev:default .
 ```
 
 构建产物:
 
-- `:both` tag 镜像含 `/opt/mihomo/standard/mihomo` 与 `/opt/mihomo/smart/mihomo`
-- 启动时由 `KERNEL` 环境变量决定使用哪一个
-- 默认 7790/7791/7792 端口(可用 `HTTP_PORT` 等环境变量覆写)
+- `/app/mihomo` 是 Smart 内核实体文件(vernesong/mihomo Smart fork)
+- 启动即使用该内核,无需 `KERNEL` 配置
+- 默认 7890/7891/7892 端口(可用 `HTTP_PORT` 等环境变量覆写)
 
-### 2. 单内核 —— 缩减体积
+### 2. 切换 Dashboard
 
 ```bash
-# 仅 standard
 docker buildx build --builder glash-builder \
-  --build-arg FLAVORS=standard \
+  --build-arg UI=zashboard \
   --platform linux/amd64 \
   --load \
-  -t glash-dev:standard .
+  -t glash-dev:zashboard .
+```
 
-# 仅 smart
+### 3. 固定内核版本
+
+默认留空 `MIHOMO_SHORT_SHA_SMART` 时,构建会调 GitHub API 解析上游最新资产。需要固定版本(离线构建或 API 限流场景):
+
+```bash
 docker buildx build --builder glash-builder \
-  --build-arg FLAVORS=smart \
+  --build-arg MIHOMO_SHORT_SHA_SMART=4624551 \
   --platform linux/amd64 \
   --load \
-  -t glash-dev:smart .
+  -t glash-dev:pinned .
 ```
 
-这些镜像里 `/opt/mihomo/{standard,smart}/` 中不存在的那个目录为空。如果尝试设了不存在的 `KERNEL`,容器启动时会立即报错:
-
-```
-[ERROR] 当前镜像未包含 Smart 内核。请重新构建镜像时加入 FLAVORS=smart 或 FLAVORS=both。
-```
-
-### 3. 通过 docker compose build
+### 4. 通过 docker compose build
 
 `docker-compose.yml` 已配好,直接:
 
@@ -159,10 +156,10 @@ services:
     build:
       context: .
       args:
-        FLAVORS: standard
+        UI: zashboard
 ```
 
-### 3.2 分发到你自己的 registry
+### 4.2 分发到你自己的 registry
 
 本仓库不发布官方镜像。若需要多台机器共用同一份镜像,自行构建后推送到你控制的 registry:
 
@@ -172,14 +169,12 @@ docker login registry.example.com
 
 # 单架构推送
 docker buildx build --builder glash-builder \
-  --build-arg FLAVORS=both \
   --platform linux/amd64 \
   --tag registry.example.com/myaccount/glash:latest \
   --push .
 
 # 多架构推送(需要 QEMU)
 docker buildx build --builder glash-builder \
-  --build-arg FLAVORS=both \
   --platform linux/amd64,linux/arm64,linux/arm/v7 \
   --tag registry.example.com/myaccount/glash:latest \
   --push .
@@ -195,22 +190,7 @@ services:
 
 国内网络环境下的 registry 选择见 [`build-in-china.md`](./build-in-china.md) 的"镜像推送"段。
 
-### 3.5 zashboard 镜像(自建)
-
-Dashboard 由 `UI` build-arg 决定。默认打包 metacubexd;需要 zashboard 时显式指定:
-
-```bash
-docker buildx build --builder glash-builder \
-  --build-arg FLAVORS=both \
-  --build-arg UI=zashboard \
-  --platform linux/amd64 \
-  --load \
-  -t my/glash:zashboard .
-```
-
-镜像内 zashboard 自动展平到 `/app/ui/`,mihomo 通过 `:9090/ui` 暴露。运行时不需要任何额外配置,默认行为与 metacubexd 镜像完全一致。
-
-### 4. 跨平台构建
+### 4.3 跨平台构建
 
 ```bash
 # 需要 QEMU(在 Linux 上)
@@ -218,9 +198,8 @@ docker run --privileged --rm tonistiigi/binfmt --install all
 
 # 多平台并导出到镜像(同号多 tag)
 docker buildx build --builder glash-builder \
-  --build-arg FLAVORS=both \
   --platform linux/amd64,linux/arm64 \
-  --tag glash-dev:both-multi \
+  --tag glash-dev:multi \
   --load .
 # 注意:--load 不支持跨平台;要真正得到多平台镜像得用 --push 到 registry
 # 或者一次性只 load 一个平台
@@ -228,25 +207,24 @@ docker buildx build --builder glash-builder \
 
 如果想在本地同时得到 amd64 与 arm64 镜像,跑两遍分别 `--load` 即可。
 
-### 5. 升级 Smart 内核 SHA 的本地步骤
+### 4.4 升级 Smart 内核的本地步骤
 
 ```bash
-# 上游 vernesong/mihomo release 拿到新 SHA
+# 上游 vernesong/mihomo release 拿到新 SHA(资产名内嵌)
 NEW_SHA=abcdef0
 
 # 改 Dockerfile
 sed -i "s/MIHOMO_SHORT_SHA_SMART=.*/MIHOMO_SHORT_SHA_SMART=${NEW_SHA}/" Dockerfile
 
 # 构建并冒烟
-docker buildx build --builder glash-builder \
-  --build-arg FLAVORS=smart --load -t glash-dev:smart .
+docker buildx build --builder glash-builder --load -t glash-dev:pinned .
 
 # 验证 Smart 内核确已在镜像里
-docker run --rm glash-dev:smart /opt/mihomo/smart/mihomo -v
+docker run --rm glash-dev:pinned /app/mihomo -v
 # 期望输出包含 alpha-smart-<新 SHA>
-
-# 用 smart-only 配置做一次端到端(见下文"端到端验证")
 ```
+
+> 不改 Dockerfile 也可以 —— 留空 `MIHOMO_SHORT_SHA_SMART` 时构建会自动解析上游最新资产。
 
 ## 受限网络下构建
 
@@ -272,18 +250,15 @@ bash tests/test_modules.sh
 
 ```bash
 # 单次冒烟:需要 buildx 已构建的镜像
-bash tests/test_container.sh glash-dev:both
+bash tests/test_container.sh glash-dev:default
 
-# KERNEL 切换用例:default = standard;KERNEL=smart 后软链应切到 smart
-bash tests/test_kernel.sh glash-dev:both
-
-# 缺位报错用例:仅 standard 单内核镜像应拒绝 KERNEL=smart
-bash tests/test_kernel_absence.sh glash-dev:standard-only
+# 内核断言:实体文件 + alpha-smart 版本标识 + KERNEL 校验
+bash tests/test_kernel.sh glash-dev:default
 ```
 
-### 手工验证(KERNEL + smart-only 配置)
+### 手工验证(smart 策略组配置)
 
-1. 准备 smart-only 配置到 `/tmp/glash-smart/config.yaml`:
+1. 准备含 `type: smart` 的配置到 `/tmp/glash-smart/config.yaml`:
 
    ```yaml
    port: 7790
@@ -313,13 +288,13 @@ bash tests/test_kernel_absence.sh glash-dev:standard-only
      - MATCH,🚀 Smart
    ```
 
-2. 用 `:both` 镜像 + `KERNEL=smart` 启动:
+2. 启动:
 
    ```bash
    docker run -d --rm --name glash-smoke-smart \
      -v /tmp/glash-smart/config.yaml:/root/.config/mihomo/config.yaml:ro \
-     -e KERNEL=smart -e SECRET=dev-smoke \
-     glash-dev:both
+     -e SECRET=dev-smoke \
+     glash-dev:default
    ```
 
 3. 断言确为 Smart 内核:
@@ -330,8 +305,6 @@ bash tests/test_kernel_absence.sh glash-dev:standard-only
 
    curl -sH "Authorization: Bearer dev-smoke" http://127.0.0.1:9080/group/weights
    # 期望:{"errors":{},"weights":{"🚀 Smart":null}}
-
-   # 反向:同样的 smart-only 配置,但 KERNEL=standard,容器应退出并打 "proxy group[0]: unsupported type: smart"
    ```
 
 ## 清理
@@ -346,7 +319,7 @@ docker stop buildx_buildkit_glash-builder0
 docker buildx rm glash-builder
 
 # 删除本地构建产物
-docker rmi glash-dev:both glash-dev:standard glash-dev:smart
+docker rmi glash-dev:default glash-dev:zashboard
 
 # 可选:清理 dangling 层
 docker image prune -f
@@ -357,33 +330,42 @@ docker image prune -f
 # 故障排查(常见问题)
 
 <details>
-<summary><b>Q: 构建时报 <code>"/build/mihomo-smart": not found</code></b></summary>
+<summary><b>Q: 构建时报上游资产 404 / 找不到 alpha-smart 内核</b></summary>
 
-`FLAVORS=standard` 或 `=smart` 时触发了 `COPY --from=builder /build/mihomo-<flavor>` 源路径缺失。本次集成已在 `Dockerfile` builder 阶段预创建两个空目录 (`/build/mihomo-standard` 和 `/build/mihomo-smart`),使单 Flavor 构建合法。确认本地 `Dockerfile` 第 33-34 行有:
+上游 `vernesong/mihomo` 的 `Prerelease-Alpha` 是滚动 tag,资产名内嵌的 SHA 会随上游提交变化。构建时留空 `MIHOMO_SHORT_SHA_SMART` 会自动调 GitHub API 解析最新资产,通常不会出这个问题。
 
-```dockerfile
-RUN mkdir -p /build/mihomo-standard /build/mihomo-smart
-```
+若仍失败:
+
+1. 确认脚本能列出资产 —— 直接跑 `sh docker/build-helpers/download-mihomo.sh amd64 vernesong/mihomo Prerelease-Alpha "" /tmp/kc`,失败时会打印可用资产列表
+2. GitHub API 未认证限流是 60 req/h,可能触发。可改用显式 SHA:`--build-arg MIHOMO_SHORT_SHA_SMART=<sha>`,跳过 API 查询
+3. 确认 `MIHOMO_TAG_SMART` 指向的 release 仍包含 `alpha-smart` 资产
 
 </details>
 
 <details>
 <summary><b>Q: 容器启动后 9090 端口无响应,但日志显示 mihomo 已启动</b></summary>
 
-通常是另一个 `clash-glash` 实例占用了 7890/9090。冒烟测试时换用 `HTTP_PORT=7790` `SOCKS_PORT=7791` `MIXED_PORT=7792` 或直接改示例配置到非冲突端口。`external-controller`(`9090`)需要改 `config.yaml`。
+通常是另一个 `glash` 实例占用了 7890/9090。冒烟测试时换用 `HTTP_PORT=7790` `SOCKS_PORT=7791` `MIXED_PORT=7792` 或直接改示例配置到非冲突端口。`external-controller`(`9090`)需要改 `config.yaml`。
 
 </details>
 
 <details>
-<summary><b>Q: KERNEL=smart 时容器立即退出并打印 "proxy group[0]: unsupported type: smart"</b></summary>
+<summary><b>Q: 容器启动报 "proxy group[0]: unsupported type: smart"</b></summary>
 
-这是 standard 内核拒绝 `type: smart` 策略组,意味着软链尚未切到 Smart 内核(或者镜像只打了 standard)。检查:
+当前镜像只包含 Smart 内核,正常情况下不应出现此错误。检查:
 
 ```bash
-docker exec <容器> readlink -f /app/mihomo
+docker exec <容器> /app/mihomo -v
 ```
 
-期望 `/opt/mihomo/smart/mihomo`。否则确认镜像确实是 `FLAVORS=smart` 或 `=both` 构建的。本项目所有 build-arg 默认 `FLAVORS=both`,CI 产物也使用 both。
+期望输出含 `alpha-smart`。若显示标准版本,说明用的是旧镜像 —— 重新构建即可。
+
+</details>
+
+<details>
+<summary><b>Q: 启动报 "KERNEL='standard' 不支持(当前镜像只包含 smart 内核)"</b></summary>
+
+当前镜像只包含 Smart 内核。删除 compose 里的 `KERNEL` 环境变量(或改为 `KERNEL=smart`)后重启容器。
 
 </details>
 
@@ -406,10 +388,10 @@ docker exec <容器> readlink -f /app/mihomo
 仓库提供 `scripts/build-interactive.sh` 通过问答引导选择 build-arg,最后生成并执行 `docker buildx build`。零依赖,纯 Bash,在终端里直接跑即可。
 
 ```bash
-./scripts/build-interactive.sh                       # 简单模式:问 FLAVORS / UI / tag / platform / 加载方式
-./scripts/build-interactive.sh --advanced            # 高级模式:展开全部 7 个 build-arg
+./scripts/build-interactive.sh                       # 简单模式:问 UI / tag / platform / 加载方式
+./scripts/build-interactive.sh --advanced            # 高级模式:展开全部 build-arg
 ./scripts/build-interactive.sh --dry-run             # 只打印命令,不真构建
-./scripts/build-interactive.sh --flavors smart --ui zashboard --tag my:zas
+./scripts/build-interactive.sh --ui zashboard --tag my:zas
 ./scripts/build-interactive.sh --push --user myaccount      # 推送到自己的 registry
 ./scripts/build-interactive.sh --platform linux/arm64,linux/amd64
 ./scripts/build-interactive.sh --help               # 全部参数说明
@@ -420,7 +402,7 @@ docker exec <容器> readlink -f /app/mihomo
 - 复用或自动创建 `glash-builder`(docker-container driver)以获得 BuildKit 缓存
 - 命令行参数可与交互混用;非 TTY 场景下走默认或命令行覆盖
 - `--dry-run` 输出完整 `docker buildx build` 命令,便于 CI / 调试
-- 校验:FLAVORS 取值、UI 取值、平台、tag 字符、SemVer、SHA 格式
+- 校验:UI 取值、平台、tag 字符、SemVer、SHA 格式
 
 `tests/test_build_interactive.sh` 覆盖 14 条断言(帮助文本、覆盖语义、错误校验、tag 拼接、多平台等),CI shell job 会自动跑。
 
